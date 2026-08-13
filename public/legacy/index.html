@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="NutriLens 智慧飲食追蹤 — 使用 AI 辨識食物照片，自動計算營養成分與熱量，輕鬆管理每日飲食紀錄。">
+  <title>NutriLens — 智慧飲食追蹤</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23080810'/%3E%3Ccircle cx='31' cy='33' r='18' fill='%2310b981'/%3E%3Ccircle cx='31' cy='33' r='9' fill='%23080810' opacity='.26'/%3E%3Cpath d='M39 17c8-5 15-2 16 6-7 2-13 0-16-6Z' fill='%2306b6d4'/%3E%3Cpath d='M30 15c1-5 5-8 10-8 1 7-2 12-9 14Z' fill='%2310b981'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay" class="loading-overlay hidden">
+  <div class="loading-spinner">
+    <div class="spinner-ring"></div>
+    <p class="loading-text">AI 分析中...</p>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- Main App -->
+<div id="app" class="hidden">
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <h1 class="app-title">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">NutriLens</span>
+      </h1>
+      <p class="app-subtitle">智慧飲食追蹤</p>
+    </div>
+  </header>
+
+  <!-- Views Container -->
+  <main id="views-container" class="views-container">
+
+    <!-- View 1: Camera / Analyze -->
+    <section id="view-camera" class="view active">
+      <!-- Today's Summary Card -->
+      <div class="summary-card glass-card">
+        <div class="summary-header">
+          <h2>今日攝取</h2>
+          <span id="today-date" class="date-badge"></span>
+        </div>
+        <div class="summary-body">
+          <div class="calorie-ring-container">
+            <div id="calorie-ring" class="calorie-ring">
+              <div class="calorie-ring-inner">
+                <span id="calories-consumed" class="calories-number">0</span>
+                <span class="calories-unit">kcal</span>
+                <span id="calories-goal" class="calories-goal">/ 0</span>
+              </div>
+            </div>
+          </div>
+          <div class="macro-bars">
+            <div class="macro-bar-item">
+              <div class="macro-bar-header">
+                <span class="macro-dot protein-dot"></span>
+                <span>蛋白質</span>
+                <span id="summary-protein" class="macro-value">0g</span>
+              </div>
+              <div class="macro-bar-track"><div id="protein-bar" class="macro-bar-fill protein-fill"></div></div>
+            </div>
+            <div class="macro-bar-item">
+              <div class="macro-bar-header">
+                <span class="macro-dot fat-dot"></span>
+                <span>脂肪</span>
+                <span id="summary-fat" class="macro-value">0g</span>
+              </div>
+              <div class="macro-bar-track"><div id="fat-bar" class="macro-bar-fill fat-fill"></div></div>
+            </div>
+            <div class="macro-bar-item">
+              <div class="macro-bar-header">
+                <span class="macro-dot carbs-dot"></span>
+                <span>碳水化合物</span>
+                <span id="summary-carbs" class="macro-value">0g</span>
+              </div>
+              <div class="macro-bar-track"><div id="carbs-bar" class="macro-bar-fill carbs-fill"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Camera Capture Area -->
+      <div class="capture-area glass-card">
+        <div id="photo-preview-container" class="photo-preview-container hidden">
+          <img id="photo-preview" class="photo-preview" alt="食物照片預覽">
+          <button id="clear-photo-btn" class="clear-photo-btn" title="清除照片">✕</button>
+        </div>
+        <div id="capture-placeholder" class="capture-placeholder">
+          <div class="capture-icon">📸</div>
+          <p>拍攝或上傳食物照片</p>
+          <p class="capture-hint">AI 將自動辨識食物並計算營養成分</p>
+        </div>
+        <input type="file" id="file-input" accept="image/*" capture="environment" class="hidden">
+
+        <div class="meal-type-selector">
+          <label for="meal-type-select">這餐是：</label>
+          <select id="meal-type-select" class="setting-input select-input">
+            <option value="自動判斷">🕒 依時間自動判斷</option>
+            <option value="早餐">🌅 早餐</option>
+            <option value="午餐">☀️ 午餐</option>
+            <option value="晚餐">🌙 晚餐</option>
+            <option value="點心">🍩 點心</option>
+          </select>
+        </div>
+
+        <div class="capture-actions">
+          <button id="capture-btn" class="btn btn-primary btn-capture">
+            <span class="btn-icon">📷</span> 拍照
+          </button>
+          <button id="upload-btn" class="btn btn-secondary">
+            <span class="btn-icon">🖼️</span> 上傳
+          </button>
+          <button id="analyze-btn" class="btn btn-accent hidden">
+            <span class="btn-icon">✨</span> 開始分析
+          </button>
+        </div>
+      </div>
+
+      <!-- Analysis Results -->
+      <div id="results-container" class="results-container hidden">
+        <!-- Results will be rendered by JS -->
+      </div>
+    </section>
+
+    <!-- View 2: Today's Meals -->
+    <section id="view-today" class="view">
+      <div class="view-header">
+        <h2>📋 今日飲食紀錄</h2>
+      </div>
+      <div id="today-meals-list" class="meals-list">
+        <div class="empty-state">
+          <span class="empty-icon">🍽️</span>
+          <p>今天還沒有紀錄</p>
+          <p class="empty-hint">去拍張照片開始記錄吧！</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 3: Favorites -->
+    <section id="view-favorites" class="view">
+      <div class="view-header">
+        <h2>⭐ 常吃清單</h2>
+        <button id="add-favorite-btn" class="btn btn-primary btn-sm">+ 新增</button>
+      </div>
+      <div id="favorites-list" class="favorites-list">
+        <div class="empty-state">
+          <span class="empty-icon">⭐</span>
+          <p>還沒有常吃的食物</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 4: History -->
+    <section id="view-history" class="view">
+      <div class="view-header">
+        <h2>📊 歷史紀錄</h2>
+        <input type="date" id="history-date-picker" class="date-picker">
+      </div>
+      <div id="history-list" class="history-list">
+        <div class="empty-state">
+          <span class="empty-icon">📅</span>
+          <p>還沒有歷史紀錄</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 4: Settings -->
+    <section id="view-settings" class="view">
+      <div class="view-header">
+        <h2>⚙️ 設定</h2>
+      </div>
+      <div class="settings-list">
+        <div class="settings-group glass-card">
+          <h3>🎯 每日目標</h3>
+          <div class="setting-item">
+            <label for="goal-calories">目標熱量 (kcal)</label>
+            <input type="number" id="goal-calories" class="setting-input" value="1500" min="800" max="5000" step="50">
+          </div>
+          <div class="setting-item">
+            <label for="goal-protein">目標蛋白質 (g)</label>
+            <input type="number" id="goal-protein" class="setting-input" value="120" min="10" max="500" step="5">
+          </div>
+          <div class="setting-item">
+            <label for="goal-fat">目標脂肪 (g)</label>
+            <input type="number" id="goal-fat" class="setting-input" value="50" min="10" max="300" step="5">
+          </div>
+          <div class="setting-item">
+            <label for="goal-carbs">目標碳水化合物 (g)</label>
+            <input type="number" id="goal-carbs" class="setting-input" value="200" min="20" max="600" step="5">
+          </div>
+          <button id="save-goal-btn" class="btn btn-primary">💾 儲存目標</button>
+        </div>
+
+        <div id="api-key-settings" class="settings-group glass-card hidden">
+          <h3>🔑 AI 設定</h3>
+          <div class="setting-item">
+            <label for="api-key-input">OpenAI API Key</label>
+            <input type="password" id="api-key-input" class="setting-input api-key-input" placeholder="sk-...">
+          </div>
+          <p class="setting-help setting-help-full">Key 只會存在此瀏覽器的 localStorage，不會上傳到 Firebase。瀏覽器端使用 API key 風險較高，僅建議個人使用。</p>
+          <p id="api-key-status" class="setting-status">尚未儲存</p>
+          <div class="settings-actions-row">
+            <button id="save-api-key-btn" class="btn btn-primary">💾 儲存金鑰</button>
+            <button id="clear-api-key-btn" class="btn btn-ghost hidden">清除金鑰</button>
+          </div>
+        </div>
+
+        <div class="settings-group glass-card">
+          <h3>📤 資料管理</h3>
+          <button id="export-btn" class="btn btn-secondary">📥 匯出 JSON 資料</button>
+          <button id="import-btn" class="btn btn-secondary">📤 匯入 JSON 資料</button>
+          <input type="file" id="import-file-input" accept=".json" class="hidden">
+          <button id="clear-data-btn" class="btn btn-danger">🗑️ 清除所有資料</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Bottom Tab Bar -->
+  <nav class="tab-bar">
+    <button class="tab-item active" data-view="view-camera">
+      <span class="tab-icon">📸</span>
+      <span class="tab-label">拍照</span>
+    </button>
+    <button class="tab-item" data-view="view-today">
+      <span class="tab-icon">📋</span>
+      <span class="tab-label">今日</span>
+    </button>
+    <button class="tab-item" data-view="view-favorites">
+      <span class="tab-icon">⭐</span>
+      <span class="tab-label">常吃</span>
+    </button>
+    <button class="tab-item" data-view="view-history">
+      <span class="tab-icon">📊</span>
+      <span class="tab-label">歷史</span>
+    </button>
+    <button class="tab-item" data-view="view-settings">
+      <span class="tab-icon">⚙️</span>
+      <span class="tab-label">設定</span>
+    </button>
+  </nav>
+</div>
+
+<!-- Modal for editing meal -->
+<div id="edit-modal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-content glass-card">
+    <div class="modal-header">
+      <h3>✏️ 編輯餐食</h3>
+    </div>
+    <div id="edit-modal-body" class="modal-body">
+      <!-- Filled by JS -->
+    </div>
+    <div class="modal-footer">
+      <button id="edit-save-btn" class="btn btn-primary">儲存修改</button>
+      <button id="edit-cancel-btn" class="btn btn-secondary">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete confirmation modal -->
+<div id="confirm-modal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-content glass-card modal-small">
+    <div class="modal-header">
+      <h3>⚠️ 確認操作</h3>
+    </div>
+    <div class="modal-body">
+      <!-- Filled by showConfirmModal JS -->
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+
+</body>
+</html>
