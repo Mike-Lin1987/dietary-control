@@ -1,6 +1,6 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const PBKDF2_ITERATIONS = 210_000;
+const PBKDF2_ITERATIONS = 100_000;
 
 function bytesToBase64Url(bytes) {
   let binary = "";
@@ -19,6 +19,15 @@ function equalBytes(left, right) {
   if (left.length !== right.length) return false;
   let difference = 0;
   for (let index = 0; index < left.length; index += 1) difference |= left[index] ^ right[index];
+  return difference === 0;
+}
+
+function equalStrings(left, right) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
   return difference === 0;
 }
 
@@ -46,8 +55,8 @@ export async function deriveAccessCodeHash(code, salt) {
 export async function verifyAccessCode(code, { expectedHash, salt }) {
   if (typeof code !== "string" || code.length < 12 || typeof expectedHash !== "string" || !expectedHash || typeof salt !== "string" || !salt) return false;
   try {
-    const actual = base64UrlToBytes(await deriveAccessCodeHash(code, salt));
-    return equalBytes(actual, base64UrlToBytes(expectedHash));
+    const actualHash = await deriveAccessCodeHash(code, salt);
+    return equalStrings(actualHash, expectedHash);
   } catch {
     return false;
   }
