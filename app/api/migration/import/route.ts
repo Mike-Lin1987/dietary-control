@@ -1,6 +1,6 @@
 import { getDb } from "../../../../db";
 import { migrationState, userSettings } from "../../../../db/schema";
-import { ApiError, DEFAULT_GOALS, errorResponse, getOwner, json, normalizeGoals, upsertFavorite, upsertMeal } from "../../_lib";
+import { ApiError, DEFAULT_GOALS, assertValidGoals, errorResponse, getOwner, json, normalizeGoals, upsertFavorite, upsertMeal } from "../../_lib";
 
 function unwrapPayload(payload: Record<string, unknown>) {
   const schemaVersion = payload.schemaVersion ?? payload.version ?? 1;
@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     const rawGoals = data.goals as Record<string, unknown> | undefined;
     const goals = rawGoals ? normalizeGoals(rawGoals) : null;
     if (goals) {
+      assertValidGoals(goals);
       await db.insert(userSettings).values({
         ownerId: owner.ownerId,
         calories: goals.calories ?? DEFAULT_GOALS.calories,
