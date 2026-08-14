@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("defines the NutriLens homepage and loads its production shell", async () => {
+test("defines the NouriLens homepage and loads its production shell", async () => {
   const [page, layout, legacyHome, legacyIndex] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
@@ -10,17 +10,21 @@ test("defines the NutriLens homepage and loads its production shell", async () =
     readFile(new URL("../public/legacy/index.html", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /title:\s*"NutriLens｜智慧飲食追蹤"/);
+  assert.match(page, /title:\s*"NouriLens｜智慧飲食追蹤"/);
   assert.match(page, /description:\s*"使用 AI 協助記錄餐點與營養攝取。"/);
   assert.match(page, /return <LegacyHome \/>/);
-  assert.match(layout, /title:\s*"NutriLens｜智慧飲食追蹤"/);
+  assert.match(layout, /title:\s*"NouriLens｜智慧飲食追蹤"/);
+  assert.match(layout, /icon:\s*"\/nourilens-mark\.png"/);
   assert.match(legacyHome, /fetch\("\/legacy\/index\.html"/);
   assert.match(legacyHome, /src = "\/legacy\/js\/app\.js"/);
   assert.match(legacyIndex, /id="app"/);
-  assert.match(legacyIndex, /NutriLens/);
+  assert.match(legacyHome, /<img[^>]+src="\/nourilens-mark\.webp"[^>]+alt=""/);
+  assert.match(legacyIndex, /<img[^>]+class="brand-mark"[^>]+src="\/nourilens-mark\.webp"[^>]+alt=""/);
+  assert.match(legacyIndex, /<div class="brand-name">NouriLens<\/div>/);
+  assert.match(legacyIndex, /<div class="app-subtitle">智慧飲食追蹤<\/div>/);
 });
 
-test("keeps the retired starter preview disconnected from NutriLens", async () => {
+test("keeps the retired starter preview disconnected from NouriLens", async () => {
   const [page, legacyHome, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/LegacyHome.tsx", import.meta.url), "utf8"),

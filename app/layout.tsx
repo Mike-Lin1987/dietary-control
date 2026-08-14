@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NutriLens｜智慧飲食追蹤",
+  title: "NouriLens｜智慧飲食追蹤",
   description: "使用 AI 協助記錄餐點與營養攝取。",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/nourilens-mark.png",
+    shortcut: "/nourilens-mark.png",
   },
 };
 

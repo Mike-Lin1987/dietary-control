@@ -1,5 +1,5 @@
 /* ============================================================
-   NutriLens — 智慧飲食追蹤  •  Design System & Styles
+   NouriLens — 智慧飲食追蹤  •  Design System & Styles
    ============================================================ */
 
 /* ----- CSS Custom Properties ----- */
@@ -236,39 +236,12 @@ label {
 }
 
 .brand-mark {
-  position: relative;
+  display: block;
   width: 36px;
   height: 36px;
   flex: 0 0 36px;
-  border-radius: 13px;
-  background:
-    radial-gradient(circle at 50% 54%, rgba(8, 8, 16, 0.26) 0 8px, transparent 9px),
-    linear-gradient(135deg, #10b981, #06b6d4);
-  box-shadow: 0 6px 22px rgba(16, 185, 129, 0.2);
-}
-
-.brand-mark::before {
-  content: "";
-  position: absolute;
-  left: 13px;
-  top: -7px;
-  width: 15px;
-  height: 16px;
-  border-radius: 12px 12px 4px 12px;
-  background: #10b981;
-  transform: rotate(18deg);
-}
-
-.brand-mark::after {
-  content: "";
-  position: absolute;
-  right: -5px;
-  top: 3px;
-  width: 18px;
-  height: 11px;
-  border-radius: 10px 10px 10px 3px;
-  background: #06b6d4;
-  transform: rotate(22deg);
+  object-fit: contain;
+  filter: drop-shadow(0 5px 12px rgba(16, 185, 129, 0.2));
 }
 
 .app-subtitle {
@@ -1662,7 +1635,7 @@ label {
 }
 
 /* ============================================================
-   NutriLens v2 - focused mobile-first layer
+   NouriLens v2 - focused mobile-first layer
    ============================================================ */
 :root {
   --bg-primary: #080d12;
@@ -1695,9 +1668,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .app-header { min-height: var(--header-height); height: auto; padding: 12px max(16px, calc((100vw - var(--max-width)) / 2 + 16px)); display: flex; align-items: center; justify-content: space-between; text-align: left; background: rgba(8, 13, 18, 0.96); border-bottom: 1px solid var(--glass-border); backdrop-filter: blur(18px); }
 .header-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.brand-mark { width: 32px; height: 32px; flex-basis: 32px; border-radius: 10px; box-shadow: none; }
-.brand-mark::before { left: 11px; top: -6px; width: 13px; height: 14px; }
-.brand-mark::after { right: -5px; top: 3px; width: 16px; height: 10px; }
+.brand-mark { width: 32px; height: 32px; flex-basis: 32px; filter: none; }
 .brand-name { color: var(--accent-strong); background: none; -webkit-text-fill-color: initial; font-size: 1.25rem; font-weight: 700; line-height: 1.1; }
 .app-subtitle { margin-top: 2px; color: var(--text-muted); font-size: .72rem; letter-spacing: .08em; text-transform: none; }
 .header-actions { display: flex; align-items: center; gap: 8px; }

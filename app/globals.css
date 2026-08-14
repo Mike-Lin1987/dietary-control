@@ -25,7 +25,7 @@ body { background: #080810; }
   box-shadow: 0 18px 48px rgb(0 0 0 / 30%);
 }
 .access-brand { display: flex; align-items: center; gap: 10px; color: #12c6b3; font-size: 1.25rem; }
-.access-brand-mark { width: 28px; height: 28px; border-radius: 8px; background: #12bfa8; box-shadow: inset -8px -8px 0 #0b93a2; }
+.access-brand-mark { display: block; width: 28px; height: 28px; object-fit: contain; }
 .access-eyebrow { margin: 28px 0 6px; color: #8d9aa7; font-size: .85rem; }
 .access-gate-panel h1 { margin: 0; font-size: 1.65rem; letter-spacing: 0; }
 .access-copy { margin: 12px 0 22px; color: #aeb8c2; line-height: 1.65; }

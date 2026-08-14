@@ -19,7 +19,7 @@ function buildPrompt(payload: Record<string, unknown>) {
   const mealType = String(payload.mealType || "未指定");
   const userNote = String(payload.userNote || "");
   const previous = payload.previousResult ? `\n前一次分析：${JSON.stringify(payload.previousResult)}` : "";
-  return `你是 NutriLens 的營養估算助手。請分析使用者提供的餐點照片，輸出符合指定 JSON Schema 的繁體中文結果。餐別：${mealType}。使用者補充：${userNote}${previous}\n若照片無法辨識，仍需誠實標示低信心並在 notes 說明，不要捏造精確數值。每個食物都要包含 name、portion、calories、protein_g、fat_g、carbs_g、uncertain。`;
+  return `你是 NouriLens 的營養估算助手。請分析使用者提供的餐點照片，輸出符合指定 JSON Schema 的繁體中文結果。餐別：${mealType}。使用者補充：${userNote}${previous}\n若照片無法辨識，仍需誠實標示低信心並在 notes 說明，不要捏造精確數值。每個食物都要包含 name、portion、calories、protein_g、fat_g、carbs_g、uncertain。`;
 }
 
 function responseText(data: any) {

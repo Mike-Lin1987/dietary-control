@@ -28,7 +28,7 @@ export default function LegacyHome() {
     let cancelled = false;
     fetch("/legacy/index.html", { cache: "no-store" })
       .then((response) => {
-        if (!response.ok) throw new Error("無法載入 NutriLens 介面");
+        if (!response.ok) throw new Error("無法載入 NouriLens 介面");
         return response.text();
       })
       .then((html) => {
@@ -78,7 +78,11 @@ export default function LegacyHome() {
     return (
       <main id="access-gate" className="access-gate-shell">
         <section className="access-gate-panel" aria-labelledby="access-title">
-          <div className="access-brand"><span className="access-brand-mark" aria-hidden="true" /><strong>NutriLens</strong></div>
+          <div className="access-brand">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="access-brand-mark" src="/nourilens-mark.webp" alt="" width="28" height="28" />
+            <strong>NouriLens</strong>
+          </div>
           <p className="access-eyebrow">啟用這個瀏覽器</p>
           <h1 id="access-title">輸入允許碼</h1>
           <p className="access-copy">啟用後，餐點、常吃清單與目標只保存在這個瀏覽器，不會同步到其他手機。</p>
@@ -89,7 +93,7 @@ export default function LegacyHome() {
             <button type="submit" disabled={submitting}>{submitting ? "驗證中…" : "啟用此裝置"}</button>
           </form>
           <div className="access-notice">
-            <p>照片與補充文字會暫時傳給 AI 辨識，NutriLens 不會保存照片。</p>
+            <p>照片與補充文字會暫時傳給 AI 辨識，NouriLens 不會保存照片。</p>
             <p>不同瀏覽器、一般模式與無痕模式是不同資料空間；清除網站資料會移除紀錄。</p>
           </div>
         </section>
@@ -100,7 +104,7 @@ export default function LegacyHome() {
   return (
     <main id="legacy-root">
       {error ? <p className="site-load-error">{error}</p> : null}
-      {!error && (accessState === "checking" || !markup) ? <p className="site-load-status">NutriLens 載入中…</p> : null}
+      {!error && (accessState === "checking" || !markup) ? <p className="site-load-status">NouriLens 載入中…</p> : null}
       {markup ? <div dangerouslySetInnerHTML={{ __html: markup }} /> : null}
     </main>
   );
