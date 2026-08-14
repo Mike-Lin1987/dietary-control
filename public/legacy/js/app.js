@@ -17,8 +17,6 @@ import {
   stopSync,
 } from './storage.js';
 import { clearPhoto, getCurrentPhoto, initCamera } from './camera.js';
-import { createCloudMigration } from './cloud-migration.js';
-import { deviceData } from './device-data.js';
 import { analyzeFood } from './analyzer.js';
 import {
   getAnalysisDraft,
@@ -37,7 +35,6 @@ import {
 import { buildFavoriteFromAnalysis } from './favorite-utils.js';
 
 let initialized = false;
-const cloudMigration = createCloudMigration({ deviceData });
 
 function resolveMealType(value) {
   if (value && value !== '自動判斷') return value;
@@ -182,36 +179,6 @@ function setupDataActions() {
     if (!await showConfirmModal('移除此裝置的允許碼授權嗎？本機飲食資料不會被刪除。')) return;
     await fetch('/api/access', { method: 'DELETE' });
     window.location.replace('/');
-  });
-  const migrationStatus = document.getElementById('cloud-migration-status');
-  const deleteCloudButton = document.getElementById('delete-cloud-copy-btn');
-  document.getElementById('cloud-migration-btn')?.addEventListener('click', async () => {
-    if (!await showConfirmModal('將以目前的 ChatGPT 帳號取得舊雲端資料，寫入這個瀏覽器並自動下載備份。繼續嗎？')) return;
-    try {
-      showLoading('正在搬移舊雲端資料…');
-      const result = await cloudMigration.migrate();
-      refreshAll();
-      if (migrationStatus) migrationStatus.textContent = `已驗證 ${result.counts.meals || 0} 筆餐點、${result.counts.favorites || 0} 個常吃項目，JSON 備份已下載。`;
-      deleteCloudButton?.classList.remove('hidden');
-      showToast('舊資料已安全搬到這個瀏覽器');
-    } catch (error) {
-      if (migrationStatus) migrationStatus.textContent = error.message || '搬移失敗';
-      showToast(error.message || '搬移失敗', 'error');
-    } finally { hideLoading(); }
-  });
-  deleteCloudButton?.addEventListener('click', async () => {
-    if (!await showConfirmModal('已完成本機驗證與 JSON 備份。現在只刪除目前 ChatGPT 帳號的雲端副本嗎？')) return;
-    if (window.prompt('請輸入「刪除雲端副本」確認') !== '刪除雲端副本') { showToast('已取消刪除', 'info'); return; }
-    try {
-      showLoading('正在刪除並確認雲端副本…');
-      const result = await cloudMigration.deleteCloudCopy({ confirmed: true });
-      deleteCloudButton.classList.add('hidden');
-      if (migrationStatus) migrationStatus.textContent = `雲端副本已刪除並確認為零筆（餐點 ${result.counts.meals || 0}、常吃 ${result.counts.favorites || 0}、照片 ${result.counts.photos || 0}）。`;
-      showToast('目前帳號的雲端副本已安全刪除');
-    } catch (error) {
-      if (migrationStatus) migrationStatus.textContent = error.message || '刪除驗證失敗';
-      showToast(error.message || '刪除驗證失敗', 'error');
-    } finally { hideLoading(); }
   });
   document.getElementById('add-favorite-btn')?.addEventListener('click', showAddFavoriteModal);
 }

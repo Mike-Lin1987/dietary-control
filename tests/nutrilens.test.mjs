@@ -38,23 +38,22 @@ test("opens history without a date filter and renders each saved day from its ow
   assert.doesNotMatch(ui, /const allMeals = getAllMeals\(\);[\s\S]*const dayMeals = allMeals\[date\] \?\? \[\];/);
 });
 
-test("keeps v3 local backup, cloud migration, and destructive-action safeguards", async () => {
-  const [storage, deviceData, migration, dataRoute, index] = await Promise.all([
+test("keeps v3 local backup and retires the completed cloud migration panel", async () => {
+  const [storage, deviceData, dataRoute, index, app] = await Promise.all([
     readFile(new URL("../public/legacy/js/storage.js", import.meta.url), "utf8"),
     readFile(new URL("../public/legacy/js/device-data.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/legacy/js/cloud-migration.js", import.meta.url), "utf8"),
     readFile(new URL("../app/api/data/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../public/legacy/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../public/legacy/js/app.js", import.meta.url), "utf8"),
   ]);
   assert.match(deviceData, /schemaVersion:\s*3/);
   assert.match(deviceData, /schemaVersion > 3/);
   assert.match(storage, /nutrilens-before-import/);
-  assert.match(migration, /snapshotHash/);
-  assert.match(migration, /DELETE_MY_CLOUD_COPY/);
   assert.match(dataRoute, /CONFIRMATION_REQUIRED/);
   assert.match(index, /data-add-method="manual"/);
   assert.doesNotMatch(index, /id="save-meal-photos"/);
-  assert.match(index, /id="cloud-migration-btn"/);
+  assert.doesNotMatch(index, /cloud-migration|舊雲端資料搬移/);
+  assert.doesNotMatch(app, /cloud-migration|createCloudMigration|cloudMigration/);
 });
 
 test("keeps v2 quick-add, CSV export, nutrition status, and undo affordances", async () => {
