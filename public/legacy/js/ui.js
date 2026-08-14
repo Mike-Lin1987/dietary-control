@@ -10,8 +10,11 @@ import {
   saveMeal,
   updateMeal,
   deleteMeal,
+  addFavorite,
+  deleteFavorite,
+  getAllFavorites,
+  updateFavorite,
 } from './storage.js';
-import { addFavorite, deleteFavorite, getAllFavorites, updateFavorite } from './favorites.js';
 import { buildFavoriteItemFromForm } from './favorite-utils.js';
 import { updateCalorieRing, updateMacroBars } from './charts.js';
 
@@ -57,7 +60,7 @@ export function showUndoToast(message, undo) {
   setTimeout(() => { if (!used) toast.remove(); }, 8000);
 }
 
-export function renderAnalysisResults(data, photoBase64, userNote = '') {
+export function renderAnalysisResults(data, userNote = '') {
   const container = document.getElementById('results-container');
   if (!container) return null;
   const confidence = { high: '高信心', medium: '中信心', low: '低信心' }[data.confidence] || '中信心';
@@ -70,8 +73,8 @@ export function renderAnalysisResults(data, photoBase64, userNote = '') {
       <button id="analysis-add-food-btn" class="text-btn add-inline-btn">＋ 新增食物項目</button>
       <div class="analysis-total"><span>目前合計</span><strong id="analysis-total-calories">${_number(data.total_calories)} kcal</strong><span id="analysis-total-macros">蛋白質 ${_number(data.total_protein_g)}g · 脂肪 ${_number(data.total_fat_g)}g · 碳水 ${_number(data.total_carbs_g)}g</span></div>
       <label class="analysis-notes-label" for="analysis-user-note">備註</label><textarea id="analysis-user-note" class="reanalyze-input" rows="2" placeholder="例如：飯吃一半、醬料少、炸皮沒吃">${_escapeHtml(data.notes || userNote)}</textarea>
-      <div class="reanalyze-panel"><label for="analysis-recheck-note">需要重新估算？</label><textarea id="analysis-recheck-note" class="reanalyze-input" rows="2" placeholder="補充照片中沒有看清楚的份量或食材"></textarea></div>
-      <div class="results-actions"><button id="reanalyze-result-btn" class="btn btn-secondary">重新估算</button><button id="favorite-result-btn" class="btn btn-secondary">加入常吃</button><button id="save-result-btn" class="btn btn-primary">確認並儲存</button><button id="discard-result-btn" class="btn btn-ghost">捨棄</button></div>
+      <p class="review-hint">如需重新辨識，請捨棄結果後重新選擇照片。</p>
+      <div class="results-actions"><button id="favorite-result-btn" class="btn btn-secondary">加入常吃</button><button id="save-result-btn" class="btn btn-primary">確認並儲存</button><button id="discard-result-btn" class="btn btn-ghost">捨棄</button></div>
     </div>`;
   container.classList.remove('hidden');
   container.querySelector('#analysis-add-food-btn')?.addEventListener('click', () => {

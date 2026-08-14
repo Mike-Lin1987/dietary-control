@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { errorResponse, getOwner, json, runtimeValue, ApiError } from "../_lib";
+import { requestAccessStatus } from "../../access-api.js";
+import { getAccessConfig } from "../../access-config";
+import { runtimeValue } from "../../runtime";
+import { errorResponse, json, ApiError } from "../_lib";
 
 const nutritionResponseSchema = {
   type: "object",
@@ -26,7 +29,8 @@ function responseText(data: any) {
 
 export async function POST(request: Request) {
   try {
-    await getOwner(request);
+    const access = await requestAccessStatus(request, { getConfig: getAccessConfig });
+    if (!access.valid) throw new ApiError(401, "ACCESS_REQUIRED", "請先輸入允許碼啟用此裝置。 ");
     const payload = (await request.json()) as Record<string, unknown>;
     const image = typeof payload.image === "string" ? payload.image : "";
     const mimeType = typeof payload.mimeType === "string" ? payload.mimeType : "";
