@@ -37,3 +37,23 @@ test("keeps the retired starter preview disconnected from NutriLens", async () =
     assert.rejects(access(new URL("../app/_sites-preview/preview.css", import.meta.url))),
   ]);
 });
+
+test("gates the site with a device access code and protects AI without account-owned storage", async () => {
+  const [legacyHome, analyzeRoute, app, legacyIndex] = await Promise.all([
+    readFile(new URL("../app/LegacyHome.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/analyze/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../public/legacy/js/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/legacy/index.html", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(legacyHome, /fetch\("\/api\/access"/);
+  assert.match(legacyHome, /id="access-gate"/);
+  assert.match(legacyHome, /type="password"/);
+  assert.match(analyzeRoute, /requestAccessStatus/);
+  assert.doesNotMatch(analyzeRoute, /getOwner/);
+  assert.match(app, /\/api\/access/);
+  assert.match(legacyIndex, /id="remove-device-access-btn"/);
+  assert.doesNotMatch(legacyIndex, /id="save-meal-photos"/);
+  assert.match(app, /await analyzeFood[\s\S]*clearPhoto\(\)[\s\S]*bindAnalysisActions/);
+  assert.doesNotMatch(app, /photo_thumbnail|save_photo/);
+});

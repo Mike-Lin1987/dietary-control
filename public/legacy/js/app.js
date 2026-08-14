@@ -1,11 +1,14 @@
 import {
+  addFavorite,
   clearAllData,
   exportCsv,
   exportData,
   getGoals,
+  getTodayKey,
   getMealsByDate,
   getRecentMeals,
   importData,
+  needsBackup,
   previewImport,
   saveMeal,
   setGoals,
@@ -14,6 +17,8 @@ import {
   stopSync,
 } from './storage.js';
 import { clearPhoto, getCurrentPhoto, initCamera } from './camera.js';
+import { createCloudMigration } from './cloud-migration.js';
+import { deviceData } from './device-data.js';
 import { analyzeFood } from './analyzer.js';
 import {
   getAnalysisDraft,
@@ -29,10 +34,10 @@ import {
   showToast,
   updateTodaySummary,
 } from './ui.js';
-import { addFavorite, startFavoritesSync, stopFavoritesSync, setOnFavoritesChanged } from './favorites.js';
 import { buildFavoriteFromAnalysis } from './favorite-utils.js';
 
 let initialized = false;
+const cloudMigration = createCloudMigration({ deviceData });
 
 function resolveMealType(value) {
   if (value && value !== '自動判斷') return value;
@@ -50,6 +55,7 @@ function refreshAll() {
   renderHistory();
   renderFavorites();
   loadGoals();
+  document.getElementById('backup-reminder')?.classList.toggle('hidden', !needsBackup());
 }
 
 function loadGoals() {
@@ -58,8 +64,6 @@ function loadGoals() {
     const input = document.getElementById(id);
     if (input) input.value = goals[key];
   }
-  const photos = document.getElementById('save-meal-photos');
-  if (photos) photos.checked = goals.save_meal_photos === true;
 }
 
 function showView(target) {
@@ -78,7 +82,7 @@ function showView(target) {
 function setupNavigation() {
   document.querySelectorAll('.tab-item[data-view]').forEach((tab) => tab.addEventListener('click', () => showView(tab.dataset.view)));
   document.querySelectorAll('[data-action="go-today"]').forEach((button) => button.addEventListener('click', () => showView('view-camera')));
-  document.querySelectorAll('[data-action="show-help"]').forEach((button) => button.addEventListener('click', () => showToast('資料會依登入帳號同步；AI 結果必須按「確認並儲存」才會寫入紀錄。', 'info')));
+  document.querySelectorAll('[data-action="show-help"]').forEach((button) => button.addEventListener('click', () => showToast('資料只保存在這個瀏覽器；請定期匯出 JSON 備份。', 'info')));
   document.querySelectorAll('[data-action="show-favorites"]').forEach((button) => button.addEventListener('click', () => showView('view-favorites')));
 }
 
@@ -126,7 +130,7 @@ async function addPreviousMeal() {
 }
 
 async function addYesterdayMeal() {
-  const date = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const date = getTodayKey(new Date(Date.now() - 86400000));
   const meal = getMealsByDate(date)[0];
   if (!meal) { showToast('昨天沒有可沿用的餐點', 'info'); return; }
   if (!await showConfirmModal(`沿用昨天的「${meal.meal_type || '餐點'}」到今天嗎？`)) return;
@@ -160,38 +164,80 @@ function setupFavoritesFilters() {
 function setupGoals() {
   document.getElementById('save-goal-btn')?.addEventListener('click', async () => {
     const value = (id, fallback) => { const parsed = Number.parseFloat(document.getElementById(id)?.value); return Number.isFinite(parsed) ? parsed : fallback; };
-    try { await setGoals({ calories: value('goal-calories', 2000), protein_g: value('goal-protein', 130), fat_g: value('goal-fat', 60), carbs_g: value('goal-carbs', 200), save_meal_photos: document.getElementById('save-meal-photos')?.checked === true }); updateTodaySummary(); showToast('每日目標已儲存'); } catch (error) { showToast(error.message || '目標儲存失敗', 'error'); }
+    try { await setGoals({ calories: value('goal-calories', 2000), protein_g: value('goal-protein', 130), fat_g: value('goal-fat', 60), carbs_g: value('goal-carbs', 200) }); updateTodaySummary(); showToast('每日目標已儲存'); } catch (error) { showToast(error.message || '目標儲存失敗', 'error'); }
   });
 }
 
 function setupDataActions() {
-  document.getElementById('export-btn')?.addEventListener('click', async () => { try { await exportData(); showToast('v2 JSON 已匯出'); } catch (error) { showToast(error.message || '匯出失敗', 'error'); } });
+  document.getElementById('export-btn')?.addEventListener('click', async () => { try { await exportData(); document.getElementById('backup-reminder')?.classList.add('hidden'); showToast('v3 JSON 備份已下載'); } catch (error) { showToast(error.message || '匯出失敗', 'error'); } });
   document.getElementById('export-csv-btn')?.addEventListener('click', () => { try { exportCsv(); showToast('CSV 已匯出'); } catch (error) { showToast(error.message || 'CSV 匯出失敗', 'error'); } });
   document.getElementById('import-btn')?.addEventListener('click', () => document.getElementById('import-file-input')?.click());
   document.getElementById('import-file-input')?.addEventListener('change', async (event) => { const file = event.target.files?.[0]; if (!file) return; try { const text = await file.text(); const preview = previewImport(text); if (!preview.ok) { showToast(preview.reason || '匯入檔案格式不正確', 'error'); return; } const confirmed = await showConfirmModal(`預覽：${preview.meals} 筆餐點、${preview.favorites} 個常吃項目${preview.hasGoals ? '與每日目標' : ''}。匯入前會先下載目前資料備份，繼續嗎？`); if (!confirmed) return; if (await importData(text)) { await startSync(); refreshAll(); showToast('資料已匯入，原資料備份也已下載'); } } catch (error) { showToast(error.message || '匯入失敗', 'error'); } finally { event.target.value = ''; } });
   document.getElementById('clear-data-btn')?.addEventListener('click', async () => {
-    if (!await showConfirmModal('這會清除餐點、常吃清單、設定與照片，且無法復原。確定繼續嗎？')) return;
+    if (!await showConfirmModal('這會清除這個瀏覽器中的餐點、常吃清單與設定，且無法復原。確定繼續嗎？')) return;
     if (window.prompt('請輸入「清除」確認') !== '清除') { showToast('已取消清除', 'info'); return; }
     try { await clearAllData(); refreshAll(); showToast('所有資料已清除'); } catch (error) { showToast(error.message || '清除失敗', 'error'); }
+  });
+  document.getElementById('remove-device-access-btn')?.addEventListener('click', async () => {
+    if (!await showConfirmModal('移除此裝置的允許碼授權嗎？本機飲食資料不會被刪除。')) return;
+    await fetch('/api/access', { method: 'DELETE' });
+    window.location.replace('/');
+  });
+  const migrationStatus = document.getElementById('cloud-migration-status');
+  const deleteCloudButton = document.getElementById('delete-cloud-copy-btn');
+  document.getElementById('cloud-migration-btn')?.addEventListener('click', async () => {
+    if (!await showConfirmModal('將以目前的 ChatGPT 帳號取得舊雲端資料，寫入這個瀏覽器並自動下載備份。繼續嗎？')) return;
+    try {
+      showLoading('正在搬移舊雲端資料…');
+      const result = await cloudMigration.migrate();
+      refreshAll();
+      if (migrationStatus) migrationStatus.textContent = `已驗證 ${result.counts.meals || 0} 筆餐點、${result.counts.favorites || 0} 個常吃項目，JSON 備份已下載。`;
+      deleteCloudButton?.classList.remove('hidden');
+      showToast('舊資料已安全搬到這個瀏覽器');
+    } catch (error) {
+      if (migrationStatus) migrationStatus.textContent = error.message || '搬移失敗';
+      showToast(error.message || '搬移失敗', 'error');
+    } finally { hideLoading(); }
+  });
+  deleteCloudButton?.addEventListener('click', async () => {
+    if (!await showConfirmModal('已完成本機驗證與 JSON 備份。現在只刪除目前 ChatGPT 帳號的雲端副本嗎？')) return;
+    if (window.prompt('請輸入「刪除雲端副本」確認') !== '刪除雲端副本') { showToast('已取消刪除', 'info'); return; }
+    try {
+      showLoading('正在刪除並確認雲端副本…');
+      const result = await cloudMigration.deleteCloudCopy({ confirmed: true });
+      deleteCloudButton.classList.add('hidden');
+      if (migrationStatus) migrationStatus.textContent = `雲端副本已刪除並確認為零筆（餐點 ${result.counts.meals || 0}、常吃 ${result.counts.favorites || 0}、照片 ${result.counts.photos || 0}）。`;
+      showToast('目前帳號的雲端副本已安全刪除');
+    } catch (error) {
+      if (migrationStatus) migrationStatus.textContent = error.message || '刪除驗證失敗';
+      showToast(error.message || '刪除驗證失敗', 'error');
+    } finally { hideLoading(); }
   });
   document.getElementById('add-favorite-btn')?.addEventListener('click', showAddFavoriteModal);
 }
 
-function thumbnail(base64) { if (!base64) return null; return base64.length > 100000 ? base64.slice(0, 100000) : base64; }
-
-async function runAnalysis({ photo, mealType, userNote = '', previousResult = null }) {
+async function runAnalysis({ photo, mealType, userNote = '' }) {
   showLoading('正在分析照片…');
-  try { const data = await analyzeFood(photo.base64, photo.mimeType, mealType, userNote, previousResult); bindAnalysisActions({ data: { ...data, meal_type: mealType }, photo, mealType, userNote }); } catch (error) { showToast(error.message || 'AI 分析失敗', 'error'); } finally { hideLoading(); }
+  try {
+    const data = await analyzeFood(photo.base64, photo.mimeType, mealType, userNote);
+    clearPhoto();
+    bindAnalysisActions({ data: { ...data, meal_type: mealType }, mealType, userNote });
+  } catch (error) { showToast(error.message || 'AI 分析失敗', 'error'); } finally { hideLoading(); }
 }
 
-function bindAnalysisActions({ data, photo, mealType, userNote }) {
-  const saveButton = renderAnalysisResults(data, photo.base64, userNote);
-  document.getElementById('reanalyze-result-btn')?.addEventListener('click', async () => { const note = document.getElementById('analysis-recheck-note')?.value.trim() || ''; if (!note) { showToast('請先輸入想補充的內容', 'error'); return; } await runAnalysis({ photo, mealType, userNote: note, previousResult: data }); });
+function bindAnalysisActions({ data, mealType, userNote }) {
+  const saveButton = renderAnalysisResults(data, userNote);
   document.getElementById('favorite-result-btn')?.addEventListener('click', async () => { try { await addFavorite(buildFavoriteFromAnalysis(getAnalysisDraft(data))); showToast('已加入常吃清單'); } catch (error) { showToast(error.message || '加入常吃清單失敗', 'error'); } });
+  document.getElementById('discard-result-btn')?.addEventListener('click', () => {
+    clearPhoto();
+    const results = document.getElementById('results-container');
+    if (results) { results.innerHTML = ''; results.classList.add('hidden'); }
+    showToast('已捨棄辨識結果', 'info');
+  });
   saveButton?.addEventListener('click', async () => {
     try {
-      const draft = getAnalysisDraft(data); const now = new Date().toISOString(); const goals = getGoals();
-      await saveMeal({ meal_type: draft.meal_type || mealType, eaten_at: now, foods: draft.foods || [], total_calories: draft.total_calories || 0, total_protein_g: draft.total_protein_g || 0, total_fat_g: draft.total_fat_g || 0, total_carbs_g: draft.total_carbs_g || 0, confidence: draft.confidence || 'medium', notes: draft.notes || '', ...(goals.save_meal_photos ? { photo_thumbnail: thumbnail(photo.base64), save_photo: true } : {}) });
+      const draft = getAnalysisDraft(data); const now = new Date().toISOString();
+      await saveMeal({ meal_type: draft.meal_type || mealType, eaten_at: now, foods: draft.foods || [], total_calories: draft.total_calories || 0, total_protein_g: draft.total_protein_g || 0, total_fat_g: draft.total_fat_g || 0, total_carbs_g: draft.total_carbs_g || 0, confidence: draft.confidence || 'medium', notes: draft.notes || '' });
       clearPhoto(); const results = document.getElementById('results-container'); if (results) { results.innerHTML = ''; results.classList.add('hidden'); } showToast('餐點已儲存');
     } catch (error) { showToast(error.message || '餐點儲存失敗', 'error'); }
   });
@@ -203,15 +249,20 @@ function setupAnalyze() {
 
 async function initialize() {
   if (initialized) return; initialized = true;
+  const accessResponse = await fetch('/api/access', { cache: 'no-store' }).catch(() => null);
+  const access = await accessResponse?.json().catch(() => ({}));
+  if (!access?.authorized) { window.location.replace('/'); return; }
   const app = document.getElementById('app');
   app?.classList.remove('hidden');
   initCamera(); setupDate(); setupNavigation(); setupAddSheet(); setupHistoryFilter(); setupFavoritesFilters(); setupAnalyze(); setupGoals(); setupDataActions();
-  setOnDataChanged(refreshAll); setOnFavoritesChanged(renderFavorites);
+  setOnDataChanged(refreshAll);
   try {
-    await Promise.all([startSync(), startFavoritesSync()]);
+    await startSync();
     refreshAll();
+    document.getElementById('sync-status').textContent = '僅存此裝置';
+    if (needsBackup()) document.getElementById('backup-reminder')?.classList.remove('hidden');
   } catch (error) { app?.classList.remove('hidden'); showToast(error.message || '資料載入失敗，請重新整理', 'error'); }
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize, { once: true }); else initialize();
-window.addEventListener('pagehide', () => { stopSync(); stopFavoritesSync(); });
+window.addEventListener('pagehide', () => { clearPhoto(); stopSync(); });

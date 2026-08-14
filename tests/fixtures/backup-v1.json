@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "goals": {
+    "calories": 1950,
+    "protein_g": 135,
+    "fat_g": 58,
+    "carbs_g": 205
+  },
+  "meals": {
+    "2026-08-12": [
+      {
+        "id": "fixture-v1-meal",
+        "meal_date": "2026-08-12",
+        "eaten_at": "2026-08-12T04:00:00.000Z",
+        "meal_type": "午餐",
+        "foods": [{ "name": "v1 匯入測試餐", "calories": 510 }],
+        "total_calories": 510,
+        "total_protein_g": 30,
+        "total_fat_g": 16,
+        "total_carbs_g": 62
+      }
+    ]
+  },
+  "favorites": [
+    {
+      "id": "fixture-v1-favorite",
+      "name": "v1 匯入常吃",
+      "description": "舊版備份相容測試",
+      "total_calories": 320
+    }
+  ]
+}
