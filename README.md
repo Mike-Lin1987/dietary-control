@@ -1,6 +1,6 @@
-# NouriLens
+# MealMori
 
-NouriLens 是以 AI 協助辨識餐點的行動版飲食紀錄網站。餐點、常吃清單與每日目標保存在每個瀏覽器自己的 IndexedDB，不會同步到 D1 或 R2。
+MealMori 是以 AI 協助辨識餐點的行動版飲食紀錄網站。餐點、常吃清單與每日目標保存在每個瀏覽器自己的 IndexedDB，不會同步到 D1 或 R2。
 
 ## 本機開發
 
@@ -43,4 +43,4 @@ npm run access:generate
 
 不同手機、瀏覽器、一般模式與無痕模式使用不同資料空間。清除網站資料會刪除本機紀錄，換裝置必須使用 JSON 備份還原。
 
-舊雲端資料搬移介面、D1/R2 routes、runtime bindings 與 Drizzle dependencies 已下線。既有雲端資源與網站隔離，不再由 NouriLens 存取。
+舊雲端資料搬移介面、D1/R2 routes、runtime bindings 與 Drizzle dependencies 已下線。既有雲端資源與網站隔離，不再由 MealMori 存取。

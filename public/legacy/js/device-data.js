@@ -34,7 +34,7 @@ function openDatabase(indexedDBFactory, name) {
     });
     request.addEventListener('success', () => resolve(request.result), { once: true });
     request.addEventListener('error', () => reject(request.error || new Error('無法開啟本機資料庫')), { once: true });
-    request.addEventListener('blocked', () => reject(new Error('請關閉其他 NouriLens 分頁後再試一次')), { once: true });
+    request.addEventListener('blocked', () => reject(new Error('請關閉其他 MealMori 分頁後再試一次')), { once: true });
   });
 }
 

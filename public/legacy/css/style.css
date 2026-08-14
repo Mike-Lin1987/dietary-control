@@ -1,5 +1,5 @@
 /* ============================================================
-   NouriLens — 智慧飲食追蹤  •  Design System & Styles
+   MealMori — 智慧飲食追蹤  •  Design System & Styles
    ============================================================ */
 
 /* ----- CSS Custom Properties ----- */
@@ -1635,7 +1635,7 @@ label {
 }
 
 /* ============================================================
-   NouriLens v2 - focused mobile-first layer
+   MealMori v2 - focused mobile-first layer
    ============================================================ */
 :root {
   --bg-primary: #080d12;

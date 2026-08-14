@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("renders the NouriLens shell", async () => {
+test("renders the MealMori shell", async () => {
   const bundle = await readFile(new URL("../dist/server/index.js", import.meta.url), "utf8");
-  assert.match(bundle, /NouriLens/);
+  assert.match(bundle, /MealMori/);
   assert.match(bundle, /legacy\/index\.html/);
 });
 
