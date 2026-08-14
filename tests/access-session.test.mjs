@@ -12,12 +12,26 @@ import {
 test("access code verification uses the configured PBKDF2 hash", async () => {
   const code = "NutriLens-Trusted-2026";
   const salt = "nutrilens-test-salt";
-  const expected = pbkdf2Sync(code, salt, 210_000, 32, "sha256").toString("base64url");
+  const expected = pbkdf2Sync(code, salt, 100_000, 32, "sha256").toString("base64url");
 
   assert.equal(await deriveAccessCodeHash(code, salt), expected);
   assert.equal(await verifyAccessCode(code, { expectedHash: expected, salt }), true);
   assert.equal(await verifyAccessCode("wrong-code-value", { expectedHash: expected, salt }), false);
   assert.equal(await verifyAccessCode("short", { expectedHash: expected, salt }), false);
+});
+
+test("access code verification does not depend on base64 decoding globals", async () => {
+  const code = "NutriLens-Edge-Compatible-2026";
+  const salt = "nutrilens-edge-test-salt";
+  const expected = pbkdf2Sync(code, salt, 100_000, 32, "sha256").toString("base64url");
+  const originalAtob = globalThis.atob;
+
+  globalThis.atob = undefined;
+  try {
+    assert.equal(await verifyAccessCode(code, { expectedHash: expected, salt }), true);
+  } finally {
+    globalThis.atob = originalAtob;
+  }
 });
 
 test("access token rejects expiration, tampering, and an old access-code version", async () => {
