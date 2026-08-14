@@ -43,4 +43,4 @@ npm run access:generate
 
 不同手機、瀏覽器、一般模式與無痕模式使用不同資料空間。清除網站資料會刪除本機紀錄，換裝置必須使用 JSON 備份還原。
 
-舊雲端資料搬移介面已在既有資料完成轉移後下線。受帳號限制的 D1/R2 routes 暫時保留，等待後續獨立執行基礎設施清理。
+舊雲端資料搬移介面、D1/R2 routes、runtime bindings 與 Drizzle dependencies 已下線。既有雲端資源與網站隔離，不再由 NutriLens 存取。
