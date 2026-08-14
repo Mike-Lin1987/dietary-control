@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { favorites } from "../../../db/schema";
 import { errorResponse, getOwner, json, rowToFavorite, upsertFavorite } from "../_lib";
@@ -6,7 +6,7 @@ import { errorResponse, getOwner, json, rowToFavorite, upsertFavorite } from "..
 export async function GET(request: Request) {
   try {
     const owner = await getOwner(request);
-    const rows = await getDb().select().from(favorites).where(eq(favorites.ownerId, owner.ownerId)).orderBy(desc(favorites.updatedAt));
+    const rows = await getDb().select().from(favorites).where(eq(favorites.ownerId, owner.ownerId)).orderBy(desc(favorites.pinned), asc(favorites.sortOrder), desc(favorites.lastUsedAt), desc(favorites.updatedAt));
     return json({ favorites: rows.map(rowToFavorite) });
   } catch (error) {
     return errorResponse(error);

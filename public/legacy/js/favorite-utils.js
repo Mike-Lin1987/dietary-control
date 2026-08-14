@@ -29,10 +29,15 @@ export function buildFavoriteItemFromForm(formData = {}) {
         .map((food) => ({
           name: String(food.name ?? '').trim(),
           portion: String(food.portion ?? '').trim(),
+          quantity: toNumber(food.quantity || 1),
+          unit: String(food.unit ?? '').trim(),
+          weight_grams: toNumber(food.weight_grams),
           calories: toNumber(food.calories),
           protein_g: toNumber(food.protein_g),
           fat_g: toNumber(food.fat_g),
           carbs_g: toNumber(food.carbs_g),
+          source: String(food.source ?? '手動').trim() || '手動',
+          confidence: String(food.confidence ?? 'medium'),
         }))
         .filter((food) => food.name || food.portion)
     : [];

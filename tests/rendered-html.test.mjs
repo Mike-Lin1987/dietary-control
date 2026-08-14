@@ -10,10 +10,10 @@ test("defines the NutriLens homepage and loads its production shell", async () =
     readFile(new URL("../public/legacy/index.html", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /title:\s*"NutriLens 飲食控制"/);
+  assert.match(page, /title:\s*"NutriLens｜智慧飲食追蹤"/);
   assert.match(page, /description:\s*"使用 AI 協助記錄餐點與營養攝取。"/);
   assert.match(page, /return <LegacyHome \/>/);
-  assert.match(layout, /title:\s*"NutriLens 飲食控制"/);
+  assert.match(layout, /title:\s*"NutriLens｜智慧飲食追蹤"/);
   assert.match(legacyHome, /fetch\("\/legacy\/index\.html"/);
   assert.match(legacyHome, /src = "\/legacy\/js\/app\.js"/);
   assert.match(legacyIndex, /id="app"/);
