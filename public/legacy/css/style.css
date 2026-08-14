@@ -1871,9 +1871,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .setting-help { margin-top: 12px; color: var(--text-muted); font-size: .72rem; line-height: 1.5; }
 .backup-reminder { margin-bottom: 14px; padding: 12px 14px; border: 1px solid #9a6d1f; border-radius: 6px; color: #f6d38b; background: #211b10; }
 .backup-reminder p { margin: 5px 0 0; color: #c8b68d; font-size: .84rem; line-height: 1.55; }
-.migration-help { margin-bottom: 14px; }
-.migration-signin { text-decoration: none; }
-.migration-status { min-height: 1.5em; margin: 12px 0 0; color: var(--text-muted); font-size: .78rem; line-height: 1.55; }
 .danger-group { border-color: rgba(239,98,98,.25); }
 .danger-text { color: #fca5a5; background: rgba(239,98,98,.12); }
 
