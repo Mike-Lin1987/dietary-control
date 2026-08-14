@@ -13,13 +13,14 @@ export function updateCalorieRing(consumed, goal) {
   const consumedEl = document.getElementById('calories-consumed');
   const goalEl = document.getElementById('calories-goal');
 
-  const progress = goal > 0 ? Math.min((consumed / goal) * 100, 100) : 0;
+  const rawProgress = goal > 0 ? (consumed / goal) * 100 : 0;
+  const progress = Math.min(rawProgress, 100);
 
   if (ring) {
     ring.style.setProperty('--progress', `${progress}%`);
 
     // Apply colour based on progress
-    if (progress > 100) {
+    if (rawProgress > 100) {
       ring.classList.add('over-budget');
     } else {
       ring.classList.remove('over-budget');

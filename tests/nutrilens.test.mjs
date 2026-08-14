@@ -33,7 +33,42 @@ test("opens history without a date filter and renders each saved day from its ow
   ]);
 
   assert.doesNotMatch(app, /picker\) picker\.value = getTodayKey\(\);/);
-  assert.match(app, /getElementById\("history-date-picker"\)\?\.addEventListener\("change", renderHistory\);/);
-  assert.match(ui, /const dayMeals = getMealsByDate\(date\);/);
+  assert.match(app, /getElementById\(['"]history-date-picker['"]\)\?\.addEventListener\(['"]change['"], renderHistory\);/);
+  assert.match(ui, /getMealsByDate\(date\)/);
   assert.doesNotMatch(ui, /const allMeals = getAllMeals\(\);[\s\S]*const dayMeals = allMeals\[date\] \?\? \[\];/);
+});
+
+test("keeps v2 review, schema migration, and destructive-action safeguards", async () => {
+  const [storage, schema, migration, index] = await Promise.all([
+    readFile(new URL("../public/legacy/js/storage.js", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/migration/import/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../public/legacy/index.html", import.meta.url), "utf8"),
+  ]);
+  assert.match(storage, /schemaVersion/);
+  assert.match(storage, /await exportData\(\)/);
+  assert.match(schema, /eatenAt: text\("eaten_at"\)/);
+  assert.match(schema, /saveMealPhotos/);
+  assert.match(migration, /UNSUPPORTED_SCHEMA/);
+  assert.match(index, /data-add-method="manual"/);
+  assert.match(index, /id="save-meal-photos"/);
+});
+
+test("keeps v2 quick-add, CSV export, nutrition status, and undo affordances", async () => {
+  const [storage, app, ui, index] = await Promise.all([
+    readFile(new URL("../public/legacy/js/storage.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/legacy/js/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/legacy/js/ui.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/legacy/index.html", import.meta.url), "utf8"),
+  ]);
+  assert.match(storage, /export function exportCsv/);
+  assert.match(storage, /\\uFEFF/);
+  assert.match(app, /addPreviousMeal/);
+  assert.match(ui, /showUndoToast/);
+  assert.match(ui, /_nextMealSuggestions/);
+  assert.match(index, /id="export-csv-btn"/);
+  assert.match(index, /data-add-method="previous"/);
+  assert.match(index, /id="today-meal-summary"/);
+  assert.match(index, /id="trend-protein-chart"/);
+  assert.match(ui, /_renderProteinTrendChart/);
 });

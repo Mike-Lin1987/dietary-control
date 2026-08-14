@@ -1,31 +1,23 @@
-/**
- * ui.js - UI rendering and interaction layer.
- */
-
 import {
+  getAllMeals,
+  getDatesWithData,
   getGoals,
   getMealsByDate,
+  getSummaryForDate,
   getTodayKey,
   getTodaySummary,
-  getDatesWithData,
+  isCompleteDay,
+  saveMeal,
   updateMeal,
   deleteMeal,
-  saveMeal,
 } from './storage.js';
-
-import {
-  getAllFavorites,
-  addFavorite,
-  deleteFavorite,
-  updateFavorite,
-} from './favorites.js';
+import { addFavorite, deleteFavorite, getAllFavorites, updateFavorite } from './favorites.js';
 import { buildFavoriteItemFromForm } from './favorite-utils.js';
-
 import { updateCalorieRing, updateMacroBars } from './charts.js';
 
-// ── Loading ─────────────────────────────────────────────
-
-export function showLoading() {
+export function showLoading(message = 'AI 分析中…') {
+  const text = document.getElementById('loading-text');
+  if (text) text.textContent = message;
   document.getElementById('loading-overlay')?.classList.remove('hidden');
 }
 
@@ -33,876 +25,293 @@ export function hideLoading() {
   document.getElementById('loading-overlay')?.classList.add('hidden');
 }
 
-// ── Toast ───────────────────────────────────────────────
-
-/**
- * Shows a toast notification.
- * @param {string} message
- * @param {'success'|'error'|'info'} type
- */
 export function showToast(message, type = 'success') {
   const container = document.getElementById('toast-container');
   if (!container) return;
-
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-
-  const iconMap = {
-    success: '✓',
-    error: '✕',
-    info: 'ℹ',
-  };
-
-  toast.innerHTML = `
-    <span class="toast-icon">${iconMap[type] ?? ''}</span>
-    <span class="toast-message">${_escapeHtml(message)}</span>
-  `;
-
+  toast.innerHTML = `<span class="toast-icon">${type === 'success' ? '✓' : type === 'error' ? '!' : 'i'}</span><span class="toast-message">${_escapeHtml(message)}</span>`;
   container.appendChild(toast);
-
-  // Trigger enter animation
   requestAnimationFrame(() => toast.classList.add('toast-visible'));
-
   setTimeout(() => {
     toast.classList.remove('toast-visible');
     toast.classList.add('toast-exit');
-    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
-    // Fallback removal
     setTimeout(() => toast.remove(), 500);
   }, 3000);
 }
 
-// ── Analysis Results ────────────────────────────────────
+export function showUndoToast(message, undo) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-info toast-with-action';
+  toast.innerHTML = `<span class="toast-message">${_escapeHtml(message)}</span><button class="toast-action">復原</button>`;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('toast-visible'));
+  let used = false;
+  toast.querySelector('.toast-action')?.addEventListener('click', async () => {
+    if (used) return;
+    used = true;
+    try { await undo(); } catch (error) { showToast(error.message || '復原失敗', 'error'); } finally { toast.remove(); }
+  });
+  setTimeout(() => { if (!used) toast.remove(); }, 8000);
+}
 
-/**
- * Renders analysis results into #results-container.
- * @param {object} data        - Analysis response from backend.
- * @param {string} photoBase64 - The photo base64 string.
- * @param {string} userNote    - User note used for the current estimate.
- * @returns {HTMLElement}      - The save button element for event binding.
- */
 export function renderAnalysisResults(data, photoBase64, userNote = '') {
   const container = document.getElementById('results-container');
   if (!container) return null;
-
-  const confidenceColors = {
-    high: { bg: 'var(--color-success)', label: '高' },
-    medium: { bg: 'var(--color-warning)', label: '中' },
-    low: { bg: 'var(--color-error)', label: '低' },
-  };
-
-  const conf = confidenceColors[data.confidence] ?? confidenceColors.medium;
-
-  const foodRows = (data.foods ?? [])
-    .map(
-      (f) => `
-      <div class="food-row">
-        <div class="food-name">
-          ${_escapeHtml(f.name)}
-          ${f.uncertain ? '<span class="uncertain-badge">不確定</span>' : ''}
-        </div>
-        <div class="food-portion">${_escapeHtml(f.portion)}</div>
-        <div class="food-nutrients">
-          <span class="nutrient cal">${f.calories} kcal</span>
-          <span class="nutrient pro">蛋白質 ${f.protein_g}g</span>
-          <span class="nutrient fat">脂肪 ${f.fat_g}g</span>
-          <span class="nutrient carb">碳水 ${f.carbs_g}g</span>
-        </div>
-      </div>
-    `
-    )
-    .join('');
-
+  const confidence = { high: '高信心', medium: '中信心', low: '低信心' }[data.confidence] || '中信心';
+  const foods = Array.isArray(data.foods) ? data.foods : [];
   container.innerHTML = `
     <div class="results-card glass-card">
-      <div class="results-header">
-        <span class="badge confidence-badge" style="background:${conf.bg}">
-          信心度：${conf.label}
-        </span>
-        <span class="badge meal-type-badge">${_escapeHtml(data.meal_type ?? '餐點')}</span>
-        ${data.model ? `<span class="badge model-badge">${_escapeHtml(data.model)}</span>` : ''}
-      </div>
-
-      <div class="food-list">
-        ${foodRows}
-      </div>
-
-      <div class="results-total">
-        <span class="total-label">合計</span>
-        <div class="food-nutrients">
-          <span class="nutrient cal">${data.total_calories ?? 0} kcal</span>
-          <span class="nutrient pro">蛋白質 ${data.total_protein_g ?? 0}g</span>
-          <span class="nutrient fat">脂肪 ${data.total_fat_g ?? 0}g</span>
-          <span class="nutrient carb">碳水 ${data.total_carbs_g ?? 0}g</span>
-        </div>
-      </div>
-
-      ${data.notes ? `<div class="results-notes"><strong>備註：</strong>${_escapeHtml(data.notes)}</div>` : ''}
-
-      <div class="reanalyze-panel">
-        <label for="analysis-user-note">補充後重新估算</label>
-        <textarea
-          id="analysis-user-note"
-          class="reanalyze-input"
-          rows="3"
-          placeholder="例如：飯吃一半、湯沒喝、醬料少、炸皮沒吃"
-        >${_escapeHtml(userNote)}</textarea>
-      </div>
-
-      <div class="results-actions">
-        <button id="reanalyze-result-btn" class="btn btn-secondary">重新估算</button>
-        <button id="favorite-result-btn" class="btn btn-secondary">加入常吃</button>
-        <button id="save-result-btn" class="btn btn-primary">儲存此餐</button>
-        <button id="discard-result-btn" class="btn btn-ghost">捨棄</button>
-      </div>
-    </div>
-  `;
-
+      <div class="results-header"><div><span class="section-kicker">AI 初步估算</span><h2>請確認餐點內容</h2></div><div class="results-badges"><span class="badge confidence-badge confidence-${_escapeHtml(data.confidence || 'medium')}">${confidence}</span><span class="badge meal-type-badge">${_escapeHtml(data.meal_type || '餐點')}</span></div></div>
+      <p class="review-hint">數值是估算結果，儲存前可直接修改名稱、份量與營養資訊。</p>
+      <div id="analysis-food-list" class="analysis-food-list">${foods.map((food, index) => _analysisFoodHtml(food, index)).join('')}</div>
+      <button id="analysis-add-food-btn" class="text-btn add-inline-btn">＋ 新增食物項目</button>
+      <div class="analysis-total"><span>目前合計</span><strong id="analysis-total-calories">${_number(data.total_calories)} kcal</strong><span id="analysis-total-macros">蛋白質 ${_number(data.total_protein_g)}g · 脂肪 ${_number(data.total_fat_g)}g · 碳水 ${_number(data.total_carbs_g)}g</span></div>
+      <label class="analysis-notes-label" for="analysis-user-note">備註</label><textarea id="analysis-user-note" class="reanalyze-input" rows="2" placeholder="例如：飯吃一半、醬料少、炸皮沒吃">${_escapeHtml(data.notes || userNote)}</textarea>
+      <div class="reanalyze-panel"><label for="analysis-recheck-note">需要重新估算？</label><textarea id="analysis-recheck-note" class="reanalyze-input" rows="2" placeholder="補充照片中沒有看清楚的份量或食材"></textarea></div>
+      <div class="results-actions"><button id="reanalyze-result-btn" class="btn btn-secondary">重新估算</button><button id="favorite-result-btn" class="btn btn-secondary">加入常吃</button><button id="save-result-btn" class="btn btn-primary">確認並儲存</button><button id="discard-result-btn" class="btn btn-ghost">捨棄</button></div>
+    </div>`;
   container.classList.remove('hidden');
-
-  // Discard handler
-  document.getElementById('discard-result-btn')?.addEventListener('click', () => {
-    container.innerHTML = '';
-    container.classList.add('hidden');
+  container.querySelector('#analysis-add-food-btn')?.addEventListener('click', () => {
+    const list = container.querySelector('#analysis-food-list');
+    if (list) list.insertAdjacentHTML('beforeend', _analysisFoodHtml({}, list.children.length));
   });
-
-  return document.getElementById('save-result-btn');
+  container.oninput = _updateAnalysisTotal;
+  container.addEventListener('change', (event) => { if (event.target.closest?.('.analysis-food-row')) { _scaleFoodNutrients(event.target, '.analysis-quantity', ['.analysis-calories', '.analysis-protein', '.analysis-fat', '.analysis-carbs']); _updateAnalysisTotal({ target: event.target }); } });
+  container.querySelectorAll('.analysis-remove-food').forEach((button) => button.addEventListener('click', () => {
+    const row = button.closest('.analysis-food-row');
+    if (row && container.querySelectorAll('.analysis-food-row').length > 1) { row.remove(); _updateAnalysisTotal({ target: container.querySelector('#analysis-food-list') }); }
+  }));
+  container.querySelector('#discard-result-btn')?.addEventListener('click', () => { container.innerHTML = ''; container.classList.add('hidden'); });
+  return container.querySelector('#save-result-btn');
 }
 
-// ── Today's Meals ───────────────────────────────────────
+export function getAnalysisDraft(fallback = {}) {
+  const list = document.getElementById('analysis-food-list');
+  const foods = list ? Array.from(list.querySelectorAll('.analysis-food-row')).map((row) => ({
+    name: row.querySelector('.analysis-name')?.value.trim() || '未命名項目',
+    portion: row.querySelector('.analysis-portion')?.value.trim() || '',
+    quantity: _numberValue(row.querySelector('.analysis-quantity')?.value, 1),
+    unit: row.querySelector('.analysis-unit')?.value.trim() || '',
+    weight_grams: _numberValue(row.querySelector('.analysis-weight')?.value, 0),
+    calories: _numberValue(row.querySelector('.analysis-calories')?.value, 0),
+    protein_g: _numberValue(row.querySelector('.analysis-protein')?.value, 0),
+    fat_g: _numberValue(row.querySelector('.analysis-fat')?.value, 0),
+    carbs_g: _numberValue(row.querySelector('.analysis-carbs')?.value, 0),
+    source: row.querySelector('.analysis-source')?.value.trim() || 'AI',
+    confidence: row.querySelector('.analysis-confidence')?.value || fallback.confidence || 'medium',
+  })) : (fallback.foods || []);
+  const totals = foods.reduce((sum, food) => ({
+    calories: sum.calories + Number(food.calories || 0), protein_g: sum.protein_g + Number(food.protein_g || 0),
+    fat_g: sum.fat_g + Number(food.fat_g || 0), carbs_g: sum.carbs_g + Number(food.carbs_g || 0),
+  }), { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 });
+  return { ...fallback, foods, total_calories: _round(totals.calories), total_protein_g: _round(totals.protein_g), total_fat_g: _round(totals.fat_g), total_carbs_g: _round(totals.carbs_g), notes: document.getElementById('analysis-user-note')?.value.trim() || '' };
+}
 
-/**
- * Renders today's meals grouped by meal_type.
- */
+function _analysisFoodHtml(food = {}, index = 0) {
+  return `<div class="analysis-food-row" data-index="${index}"><div class="analysis-food-heading"><input class="analysis-name" type="text" value="${_escapeHtml(food.name || '')}" placeholder="食物名稱"><button type="button" class="icon-btn analysis-remove-food" title="刪除此項" aria-label="刪除食物">×</button></div><div class="analysis-food-grid"><label>份量<input class="analysis-portion" type="text" value="${_escapeHtml(food.portion || '')}" placeholder="1 碗"></label><label>數量<input class="analysis-quantity" type="number" min="0" step="0.1" value="${_number(food.quantity, 1)}"></label><label>單位<input class="analysis-unit" type="text" value="${_escapeHtml(food.unit || '')}" placeholder="份"></label><label>重量 g<input class="analysis-weight" type="number" min="0" step="1" value="${_number(food.weight_grams, 0)}"></label></div><div class="analysis-food-grid nutrient-grid"><label>熱量<input class="analysis-calories" type="number" min="0" step="0.1" value="${_number(food.calories)}"></label><label>蛋白質<input class="analysis-protein" type="number" min="0" step="0.1" value="${_number(food.protein_g)}"></label><label>脂肪<input class="analysis-fat" type="number" min="0" step="0.1" value="${_number(food.fat_g)}"></label><label>碳水<input class="analysis-carbs" type="number" min="0" step="0.1" value="${_number(food.carbs_g)}"></label></div><div class="analysis-food-meta"><label>來源<input class="analysis-source" type="text" value="${_escapeHtml(food.source || 'AI')}" placeholder="AI／手動"></label><label>信心<select class="analysis-confidence"><option value="high" ${food.confidence === 'high' ? 'selected' : ''}>高</option><option value="medium" ${!food.confidence || food.confidence === 'medium' ? 'selected' : ''}>中</option><option value="low" ${food.confidence === 'low' ? 'selected' : ''}>低</option></select></label></div></div>`;
+}
+
+function _updateAnalysisTotal(event) {
+  if (!event.target.closest?.('#analysis-food-list')) return;
+  const draft = getAnalysisDraft({});
+  const total = document.getElementById('analysis-total-calories');
+  const macros = document.getElementById('analysis-total-macros');
+  if (total) total.textContent = `${_number(draft.total_calories)} kcal`;
+  if (macros) macros.textContent = `蛋白質 ${_number(draft.total_protein_g)}g · 脂肪 ${_number(draft.total_fat_g)}g · 碳水 ${_number(draft.total_carbs_g)}g`;
+}
+
 export function renderTodayMeals() {
   const list = document.getElementById('today-meals-list');
   if (!list) return;
-
-  const meals = getMealsByDate(getTodayKey());
-
-  if (!meals.length) {
-    list.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">🍽️</div>
-        <p>今天還沒有記錄任何餐點</p>
-        <p class="empty-hint">切換到拍照分頁來新增吧！</p>
-      </div>
-    `;
-    return;
-  }
-
-  // Group by meal_type
-  const groups = {};
-  const ORDER = ['早餐', '午餐', '晚餐', '點心'];
-
-  for (const meal of meals) {
-    const type = meal.meal_type ?? '其他';
-    if (!groups[type]) groups[type] = [];
-    groups[type].push(meal);
-  }
-
-  // Sort groups by predefined order
-  const sortedKeys = Object.keys(groups).sort((a, b) => {
-    const ai = ORDER.indexOf(a);
-    const bi = ORDER.indexOf(b);
-    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-  });
-
-  let html = '';
-  const todayKey = getTodayKey();
-
-  for (const type of sortedKeys) {
-    const mealGroup = groups[type];
-    html += `
-      <div class="meal-group glass-card">
-        <h3 class="meal-group-title">${_escapeHtml(type)}</h3>
-        ${mealGroup
-          .map(
-            (meal) => `
-          <div class="meal-item" data-meal-id="${meal.id}">
-            <div class="meal-item-header">
-              <span class="meal-time">${_formatTime(meal.timestamp)}</span>
-              <div class="meal-item-actions">
-                <button class="icon-btn add-fav-btn" data-meal-id="${meal.id}" data-date="${todayKey}" title="加入常吃">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                </button>
-                <button class="icon-btn edit-meal-btn" data-date="${todayKey}" data-id="${meal.id}" title="編輯">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                </button>
-                <button class="icon-btn delete-meal-btn" data-date="${todayKey}" data-id="${meal.id}" title="刪除">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                </button>
-              </div>
-            </div>
-            <div class="meal-food-list">
-              ${(meal.foods ?? [])
-                .map(
-                  (f) =>
-                    `<div class="meal-food-item">${_escapeHtml(f.name)} <span class="food-cal">${f.calories} kcal</span></div>`
-                )
-                .join('')}
-            </div>
-            <div class="meal-total">
-              合計 ${meal.total_calories ?? 0} kcal ｜
-              蛋白質 ${meal.total_protein_g ?? 0}g ｜
-              脂肪 ${meal.total_fat_g ?? 0}g ｜
-              碳水 ${meal.total_carbs_g ?? 0}g
-            </div>
-          </div>
-        `
-          )
-          .join('')}
-      </div>
-    `;
-  }
-
-  list.innerHTML = html;
-
-  // Bind add-to-favorites buttons
-  list.querySelectorAll('.add-fav-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const meal = getMealsByDate(btn.dataset.date).find(m => m.id === btn.dataset.mealId);
-      if (!meal) return;
-      try {
-        btn.disabled = true;
-        await addFavorite({
-          name: meal.meal_type || '我的餐點',
-          description: (meal.foods ?? []).map(f => `${f.name} ${f.portion}`).join('、'),
-          foods: meal.foods ?? [],
-          total_calories: meal.total_calories ?? 0,
-          total_protein_g: meal.total_protein_g ?? 0,
-          total_fat_g: meal.total_fat_g ?? 0,
-          total_carbs_g: meal.total_carbs_g ?? 0,
-        });
-        showToast('已加入常吃清單 ⭐');
-      } catch (err) {
-        showToast('加入常吃失敗：' + (err.message || '請稍後再試'), 'error');
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  });
-
-  // Bind edit buttons
-  list.querySelectorAll('.edit-meal-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      showEditModal(btn.dataset.date, btn.dataset.id);
-    });
-  });
-
-  // Bind delete buttons
-  list.querySelectorAll('.delete-meal-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const yes = await showConfirmModal('確定要刪除這筆餐點紀錄嗎？');
-      if (yes) {
-        deleteMeal(btn.dataset.date, btn.dataset.id);
-        renderTodayMeals();
-        updateTodaySummary();
-        showToast('已刪除餐點紀錄');
-      }
-    });
-  });
+  const date = getTodayKey();
+  const meals = getMealsByDate(date);
+  const dateLabel = document.getElementById('record-date-label');
+  if (dateLabel) dateLabel.textContent = `${date} · ${_getWeekday(date)}`;
+  if (!meals.length) { list.innerHTML = '<div class="empty-state"><span class="empty-icon">○</span><p>今天還沒有紀錄</p><p class="empty-hint">用下方「＋」新增第一餐。</p></div>'; return; }
+  const order = ['早餐', '午餐', '晚餐', '點心', '其他'];
+  const groups = new Map();
+  for (const meal of meals) { const key = meal.meal_type || '其他'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(meal); }
+  list.innerHTML = Array.from(groups.entries()).sort(([a], [b]) => (order.indexOf(a) < 0 ? 99 : order.indexOf(a)) - (order.indexOf(b) < 0 ? 99 : order.indexOf(b))).map(([type, rows]) => `<section class="meal-group glass-card" data-meal-type="${_escapeHtml(type)}"><div class="meal-group-heading"><h2>${_escapeHtml(type)}</h2><span class="muted-label">${rows.length} 筆</span></div>${rows.map((meal) => _mealRowHtml(meal)).join('')}</section>`).join('');
+  _bindMealActions(list);
 }
 
-// ── History ─────────────────────────────────────────────
+function _mealRowHtml(meal) {
+  const eatenAt = _formatTime(meal.eaten_at || meal.timestamp);
+  const recordedAt = _formatTime(meal.timestamp);
+  const recordNote = recordedAt && recordedAt !== eatenAt ? `<small class="record-time">紀錄於 ${recordedAt}</small>` : '';
+  return `<article class="meal-item" data-meal-id="${_escapeHtml(meal.id)}"><div class="meal-item-header"><div><time class="meal-time">${eatenAt}</time>${recordNote}<strong class="meal-title">${_escapeHtml((meal.foods || []).map((food) => food.name).filter(Boolean).slice(0, 3).join('、') || '未命名餐點')}</strong></div><div class="meal-item-actions"><button class="icon-btn add-fav-btn" data-id="${_escapeHtml(meal.id)}" title="加入常吃" aria-label="加入常吃">☆</button><button class="icon-btn edit-meal-btn" data-id="${_escapeHtml(meal.id)}" title="編輯" aria-label="編輯">✎</button><button class="icon-btn delete-meal-btn" data-id="${_escapeHtml(meal.id)}" title="刪除" aria-label="刪除">⌫</button></div></div><div class="meal-food-list">${(meal.foods || []).map((food) => `<div class="meal-food-item"><span>${_escapeHtml(food.name || '未命名項目')} <small>${_escapeHtml(_foodPortion(food))}</small></span><span class="food-cal">${_number(food.calories)} kcal</span></div>`).join('')}</div><div class="meal-total">${_number(meal.total_calories)} kcal <span>·</span> 蛋白質 ${_number(meal.total_protein_g)}g <span>·</span> 脂肪 ${_number(meal.total_fat_g)}g <span>·</span> 碳水 ${_number(meal.total_carbs_g)}g</div></article>`;
+}
 
-/**
- * Renders history list with expandable date cards.
- */
+function _bindMealActions(root) {
+  root.querySelectorAll('.add-fav-btn').forEach((button) => button.addEventListener('click', async () => {
+    const meal = getAllMeals().find((item) => item.id === button.dataset.id);
+    if (!meal) return;
+    try { await addFavorite({ name: meal.meal_type || '我的餐點', description: (meal.foods || []).map((food) => `${food.name} ${_foodPortion(food)}`).join('、'), foods: meal.foods || [], total_calories: meal.total_calories || 0, total_protein_g: meal.total_protein_g || 0, total_fat_g: meal.total_fat_g || 0, total_carbs_g: meal.total_carbs_g || 0 }); showToast('已加入常吃清單'); } catch (error) { showToast(error.message || '加入常吃失敗', 'error'); }
+  }));
+  root.querySelectorAll('.edit-meal-btn').forEach((button) => button.addEventListener('click', () => { const meal = getAllMeals().find((item) => item.id === button.dataset.id); if (meal) showEditModal(meal.meal_date, meal.id); }));
+  root.querySelectorAll('.delete-meal-btn').forEach((button) => button.addEventListener('click', async () => {
+    const meal = getAllMeals().find((item) => item.id === button.dataset.id);
+    if (!meal || !await showConfirmModal('確定要刪除這筆餐點紀錄嗎？')) return;
+     await deleteMeal(meal.id);
+     renderTodayMeals(); updateTodaySummary();
+     showUndoToast('已刪除餐點紀錄', async () => { await saveMeal({ ...meal, id: meal.id }); renderTodayMeals(); updateTodaySummary(); renderHistory(); });
+  }));
+}
+
 export function renderHistory() {
   const list = document.getElementById('history-list');
   if (!list) return;
-
-  const datePicker = document.getElementById('history-date-picker');
-  const filterDate = datePicker?.value || '';
-
-  let dates = getDatesWithData();
-
-  // Filter if a specific date is chosen
-  if (filterDate) {
-    dates = dates.filter((d) => d === filterDate);
-  }
-
-  // Most recent first
-  dates.sort((a, b) => b.localeCompare(a));
-
-  if (!dates.length) {
-    list.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">📋</div>
-        <p>沒有歷史紀錄</p>
-      </div>
-    `;
-    return;
-  }
-
-  let html = '';
-
-  for (const date of dates) {
-    const dayMeals = getMealsByDate(date);
-    let dayCal = 0, dayPro = 0, dayFat = 0, dayCarb = 0;
-
-    for (const m of dayMeals) {
-      dayCal  += m.total_calories ?? 0;
-      dayPro  += m.total_protein_g ?? 0;
-      dayFat  += m.total_fat_g ?? 0;
-      dayCarb += m.total_carbs_g ?? 0;
-    }
-
-    const weekday = _getWeekday(date);
-
-    html += `
-      <div class="history-card glass-card">
-        <div class="history-card-header" data-date="${date}">
-          <div class="history-date-info">
-            <span class="history-date">${date}</span>
-            <span class="history-weekday">${weekday}</span>
-          </div>
-          <div class="history-summary-mini">
-            <span class="history-cal">${Math.round(dayCal)} kcal</span>
-            <span class="history-macro">蛋 ${Math.round(dayPro)}g ｜ 脂 ${Math.round(dayFat)}g ｜ 碳 ${Math.round(dayCarb)}g</span>
-          </div>
-          <span class="history-expand-icon">▼</span>
-        </div>
-        <div class="history-card-body hidden">
-          ${dayMeals
-            .map(
-              (meal) => `
-            <div class="history-meal-item">
-              <div class="history-meal-header">
-                <span class="badge meal-type-badge">${_escapeHtml(meal.meal_type ?? '其他')}</span>
-                <span class="meal-time">${_formatTime(meal.timestamp)}</span>
-              </div>
-              <div class="meal-food-list">
-                ${(meal.foods ?? [])
-                  .map(
-                    (f) =>
-                      `<div class="meal-food-item">${_escapeHtml(f.name)} (${_escapeHtml(f.portion)}) <span class="food-cal">${f.calories} kcal</span></div>`
-                  )
-                  .join('')}
-              </div>
-              <div class="meal-total">
-                合計 ${meal.total_calories ?? 0} kcal ｜
-                蛋白質 ${meal.total_protein_g ?? 0}g ｜
-                脂肪 ${meal.total_fat_g ?? 0}g ｜
-                碳水 ${meal.total_carbs_g ?? 0}g
-              </div>
-            </div>
-          `
-            )
-            .join('')}
-        </div>
-      </div>
-    `;
-  }
-
-  list.innerHTML = html;
-
-  // Bind expand / collapse
-  list.querySelectorAll('.history-card-header').forEach((header) => {
-    header.addEventListener('click', () => {
-      const body = header.nextElementSibling;
-      const icon = header.querySelector('.history-expand-icon');
-      body.classList.toggle('hidden');
-      if (icon) icon.textContent = body.classList.contains('hidden') ? '▼' : '▲';
-    });
-  });
+  const picker = document.getElementById('history-date-picker');
+  const filterDate = picker?.value || '';
+  const dates = getDatesWithData().filter((date) => !filterDate || date === filterDate).sort((a, b) => b.localeCompare(a));
+  _renderTrendSummary();
+  _renderTrendChart();
+  _renderProteinTrendChart();
+  if (!dates.length) { list.innerHTML = '<div class="empty-state"><span class="empty-icon">□</span><p>沒有符合條件的紀錄</p></div>'; return; }
+  list.innerHTML = dates.map((date) => {
+    const meals = getMealsByDate(date); const summary = getSummaryForDate(date);
+    return `<article class="history-card glass-card"><button class="history-card-header" data-date="${date}"><span class="history-date-info"><strong>${date}</strong><span>${_getWeekday(date)} · ${meals.length} 筆</span></span><span class="history-summary-mini"><strong>${_number(summary.calories)} kcal</strong><span>蛋 ${_number(summary.protein_g)}g · 脂 ${_number(summary.fat_g)}g · 碳 ${_number(summary.carbs_g)}g</span></span><span class="history-expand-icon">⌄</span></button><div class="history-card-body hidden">${meals.map((meal) => `<div class="history-meal-item"><div class="history-meal-header"><span class="badge meal-type-badge">${_escapeHtml(meal.meal_type || '其他')}</span><span class="meal-time">${_formatTime(meal.eaten_at || meal.timestamp)}</span><div class="history-actions"><button class="icon-btn history-edit-btn" data-id="${_escapeHtml(meal.id)}" title="編輯" aria-label="編輯">✎</button><button class="icon-btn history-delete-btn" data-id="${_escapeHtml(meal.id)}" title="刪除" aria-label="刪除">⌫</button></div></div><div class="meal-food-list">${(meal.foods || []).map((food) => `<div class="meal-food-item"><span>${_escapeHtml(food.name || '未命名項目')} <small>${_escapeHtml(_foodPortion(food))}</small></span><span class="food-cal">${_number(food.calories)} kcal</span></div>`).join('')}</div><div class="meal-total">${_number(meal.total_calories)} kcal · 蛋白質 ${_number(meal.total_protein_g)}g · 脂肪 ${_number(meal.total_fat_g)}g · 碳水 ${_number(meal.total_carbs_g)}g</div></div>`).join('')}</div></article>`;
+  }).join('');
+  list.querySelectorAll('.history-card-header').forEach((header) => header.addEventListener('click', () => { const body = header.nextElementSibling; body?.classList.toggle('hidden'); header.querySelector('.history-expand-icon').textContent = body?.classList.contains('hidden') ? '⌄' : '⌃'; }));
+  list.querySelectorAll('.history-edit-btn').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); const meal = getAllMeals().find((item) => item.id === button.dataset.id); if (meal) showEditModal(meal.meal_date, meal.id); }));
+   list.querySelectorAll('.history-delete-btn').forEach((button) => button.addEventListener('click', async (event) => { event.stopPropagation(); const meal = getAllMeals().find((item) => item.id === button.dataset.id); if (!meal || !await showConfirmModal('確定要刪除這筆紀錄嗎？')) return; await deleteMeal(meal.id); renderHistory(); updateTodaySummary(); showUndoToast('已刪除紀錄', async () => { await saveMeal({ ...meal, id: meal.id }); renderHistory(); updateTodaySummary(); renderTodayMeals(); }); }));
 }
 
-// ── Summary ─────────────────────────────────────────────
+function _renderTrendSummary() {
+  const container = document.getElementById('trend-summary'); if (!container) return;
+  const days = Number(document.getElementById('trend-range')?.value || 7); const dates = _getDateWindow(days); const recordedDates = dates.filter((date) => getMealsByDate(date).length); const summaries = recordedDates.map(getSummaryForDate); const goals = getGoals();
+  const average = (key) => summaries.length ? summaries.reduce((sum, item) => sum + item[key], 0) / summaries.length : 0;
+  const complete = recordedDates.filter(isCompleteDay).length; const caloriesMet = summaries.filter((item) => item.calories <= goals.calories).length; const proteinMet = summaries.filter((item) => item.protein_g >= goals.protein_g).length;
+  const delta = average('calories') - goals.calories; const sentence = !summaries.length ? '先完成幾天記錄，趨勢會更有參考價值。未紀錄日期不會當成 0 kcal。' : `區間 ${days} 天中有紀錄 ${summaries.length} 天，其中 ${complete} 天完成早餐、午餐與晚餐。${delta > 0 ? `平均熱量高於目標 ${_number(delta)} kcal` : `平均熱量低於目標 ${_number(Math.abs(delta))} kcal`}。`;
+  container.innerHTML = `<div class="trend-summary-grid"><div><span class="metric-label">平均熱量</span><strong>${_number(average('calories'))} <small>kcal</small></strong></div><div><span class="metric-label">平均蛋白質</span><strong>${_number(average('protein_g'))} <small>g</small></strong></div><div><span class="metric-label">平均脂肪</span><strong>${_number(average('fat_g'))} <small>g</small></strong></div><div><span class="metric-label">平均碳水</span><strong>${_number(average('carbs_g'))} <small>g</small></strong></div><div><span class="metric-label">完整紀錄</span><strong>${complete} <small>/ ${days} 天</small></strong></div><div><span class="metric-label">達標</span><strong>${caloriesMet} <small>熱量 · 蛋白質 ${proteinMet} 天</small></strong></div></div><p class="trend-summary-text">${sentence}</p>`;
+}
 
-/**
- * Reads today's summary and updates the dashboard charts.
- */
+function _renderTrendChart() {
+  const container = document.getElementById('trend-chart'); if (!container) return;
+  const days = Number(document.getElementById('trend-range')?.value || 7); const dates = _getDateWindow(days).reverse(); const goal = getGoals().calories; const max = Math.max(goal, ...dates.map((date) => getSummaryForDate(date).calories), 1);
+  container.innerHTML = `<div class="trend-chart-header"><div><h2>每日熱量</h2><span class="muted-label">目標 ${_number(goal)} kcal</span></div><span class="trend-legend"><i></i>已記錄</span></div><div class="trend-bars">${dates.map((date) => { const recorded = getMealsByDate(date).length > 0; const value = getSummaryForDate(date).calories; return `<div class="trend-bar-column ${recorded ? '' : 'is-unrecorded'}"><span class="trend-bar-value">${recorded ? Math.round(value) : '—'}</span><div class="trend-bar-track"><div class="trend-bar-fill ${value > goal ? 'is-over' : ''}" style="height:${recorded ? Math.max(8, Math.round(value / max * 100)) : 0}%"></div><span class="trend-goal-line" style="bottom:${Math.round(goal / max * 100)}%"></span></div><span class="trend-bar-label">${date.slice(5)}</span></div>`; }).join('')}</div>`;
+}
+
+function _renderProteinTrendChart() {
+  const container = document.getElementById('trend-protein-chart'); if (!container) return;
+  const days = Number(document.getElementById('trend-range')?.value || 7); const dates = _getDateWindow(days).reverse(); const goal = getGoals().protein_g; const max = Math.max(goal, ...dates.map((date) => getSummaryForDate(date).protein_g), 1);
+  container.innerHTML = `<div class="trend-chart-header"><div><h2>每日蛋白質</h2><span class="muted-label">目標 ${_number(goal)} g</span></div><span class="trend-legend"><i></i>已記錄</span></div><div class="trend-bars">${dates.map((date) => { const recorded = getMealsByDate(date).length > 0; const value = getSummaryForDate(date).protein_g; return `<div class="trend-bar-column ${recorded ? '' : 'is-unrecorded'}"><span class="trend-bar-value">${recorded ? _number(value) : '—'}</span><div class="trend-bar-track"><div class="trend-bar-fill ${value > goal ? 'is-over' : ''}" style="height:${recorded ? Math.max(8, Math.round(value / max * 100)) : 0}%"></div><span class="trend-goal-line" style="bottom:${Math.round(goal / max * 100)}%"></span></div><span class="trend-bar-label">${date.slice(5)}</span></div>`; }).join('')}</div>`;
+}
+
 export function updateTodaySummary() {
-  const summary = getTodaySummary();
-  const goals = getGoals();
-
-  updateCalorieRing(summary.calories, goals.calories);
-  updateMacroBars(summary.protein_g, summary.fat_g, summary.carbs_g, goals);
+  const summary = getTodaySummary(); const goals = getGoals(); const remaining = goals.calories - summary.calories; const meals = getMealsByDate(getTodayKey());
+  updateCalorieRing(summary.calories, goals.calories); updateMacroBars(summary.protein_g, summary.fat_g, summary.carbs_g, goals);
+  const consumed = document.getElementById('summary-consumed-text'); const remainingEl = document.getElementById('summary-remaining-text'); const count = document.getElementById('today-meal-count'); const status = document.getElementById('today-status'); const insight = document.getElementById('today-insight');
+  if (consumed) consumed.textContent = `${_number(summary.calories)} kcal`; if (remainingEl) remainingEl.textContent = remaining >= 0 ? `${_number(remaining)} kcal` : `已超出 ${_number(Math.abs(remaining))} kcal`;
+  if (count) count.textContent = `${meals.length} 餐`;
+  if (status) { status.textContent = summary.calories === 0 ? '尚未開始' : remaining >= 0 ? '目標內' : '已超過'; status.className = `status-pill ${summary.calories === 0 ? 'status-neutral' : remaining >= 0 ? 'status-good' : 'status-over'}`; }
+  _setMacroStatus('protein', summary.protein_g, goals.protein_g); _setMacroStatus('fat', summary.fat_g, goals.fat_g); _setMacroStatus('carbs', summary.carbs_g, goals.carbs_g);
+  if (insight) { const suggestions = _nextMealSuggestions(summary, goals); insight.innerHTML = `<span class="insight-icon" aria-hidden="true">i</span><span><strong>下一餐怎麼吃？</strong> ${suggestions.join(' ')}<small>一般飲食參考，不取代醫療或營養師建議。</small></span>`; }
+  _renderTodayMealSummary(meals);
 }
 
-// ── Edit Modal ──────────────────────────────────────────
+function _getDateWindow(days) {
+  const end = new Date(`${getTodayKey()}T00:00:00Z`);
+  return Array.from({ length: days }, (_, index) => { const date = new Date(end); date.setUTCDate(end.getUTCDate() - index); return date.toISOString().slice(0, 10); });
+}
 
-/**
- * Shows the edit modal for a specific meal.
- */
+function _setMacroStatus(name, value, goal) {
+  const element = document.getElementById(`summary-${name}-status`); if (!element) return;
+  const difference = goal - value; const ratio = goal > 0 ? value / goal : 1;
+  const status = difference < 0 ? { label: `已超出 ${_number(Math.abs(difference))}g`, className: 'is-over' } : ratio >= 0.95 ? { label: ratio >= 1 ? '已達標' : `接近目標，還差 ${_number(difference)}g`, className: 'is-good' } : { label: `尚不足 ${_number(difference)}g`, className: 'is-low' };
+  element.textContent = status.label; element.className = `macro-status ${status.className}`;
+}
+
+function _nextMealSuggestions(summary, goals) {
+  const suggestions = [];
+  if (summary.fat_g > goals.fat_g) suggestions.push('今天脂肪已偏高，下一餐優先選低脂蛋白質，搭配兩份蔬菜，減少炸物、堅果、起司與額外醬汁。');
+  if (goals.protein_g - summary.protein_g > 30) suggestions.push(`蛋白質仍不足，下一餐可補充約 30～40g，選雞胸、白肉魚、蝦、豆腐或無糖高蛋白飲。`);
+  if (goals.calories - summary.calories < 400 && goals.calories - summary.calories >= 0) suggestions.push('今日剩餘熱量較少，建議選低油、足量蛋白質及蔬菜。');
+  if (goals.carbs_g - summary.carbs_g > 30 && goals.calories - summary.calories >= 400) suggestions.push('碳水仍有空間，可補充半碗至一碗飯、地瓜或燕麥。');
+  if (!suggestions.length) suggestions.push('目前分布穩定，下一餐依剩餘熱量搭配蛋白質與蔬菜即可。');
+  return suggestions.slice(0, 3);
+}
+
+function _renderTodayMealSummary(meals) {
+  const container = document.getElementById('today-meal-summary'); if (!container) return;
+  const groups = ['早餐', '午餐', '晚餐', '點心'].map((type) => { const rows = meals.filter((meal) => meal.meal_type === type); return { type, rows, calories: rows.reduce((sum, meal) => sum + Number(meal.total_calories || 0), 0), foods: rows.reduce((sum, meal) => sum + (meal.foods || []).length, 0) }; });
+  container.innerHTML = `<div class="today-meal-summary-header"><span class="section-kicker">今日餐別</span><span class="muted-label">快速查看</span></div><div class="today-meal-summary-grid">${groups.map((group) => `<button class="today-meal-card ${group.rows.length ? 'has-record' : ''}" data-meal-type="${group.type}"><span>${group.type}</span><strong>${group.rows.length ? `${_number(group.calories)} kcal` : '尚未記錄'}</strong><small>${group.rows.length ? `${group.foods} 個食物項目` : '點擊新增'}</small></button>`).join('')}</div>`;
+  container.querySelectorAll('.today-meal-card').forEach((button) => button.addEventListener('click', () => { document.querySelector('[data-view="view-today"]')?.click(); setTimeout(() => document.querySelector(`.meal-group[data-meal-type="${button.dataset.mealType}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }));
+}
+
 export function showEditModal(dateStr, mealId) {
-  const meals = getMealsByDate(dateStr);
-  const meal = meals.find((m) => m.id === mealId);
-  if (!meal) return;
+  const meal = getMealsByDate(dateStr).find((item) => item.id === mealId) || getAllMeals().find((item) => item.id === mealId); if (meal) _showMealEditor({ meal });
+}
 
-  const modal = document.getElementById('edit-modal');
-  if (!modal) return;
+export function showManualMealModal() { _showMealEditor({ meal: null }); }
 
-  const body = modal.querySelector('.modal-body') ?? modal;
-
-  const getFoodItemHtml = (f, index) => `
-    <div class="edit-food-item" data-index="${index}">
-      <div class="edit-food-header">
-        <input type="text" class="edit-name" value="${_escapeHtml(f.name || '')}" placeholder="食物名稱">
-        <input type="text" class="edit-portion" value="${_escapeHtml(f.portion || '')}" placeholder="份量 (例: 1碗)">
-        <button type="button" class="btn-delete-food" title="刪除此項">🗑️</button>
-      </div>
-      <div class="edit-fields">
-        <label>熱量 <input type="number" class="edit-cal" value="${f.calories || 0}" min="0" step="1"></label>
-        <label>蛋白質 <input type="number" class="edit-pro" value="${f.protein_g || 0}" min="0" step="0.1"></label>
-        <label>脂肪 <input type="number" class="edit-fat" value="${f.fat_g || 0}" min="0" step="0.1"></label>
-        <label>碳水 <input type="number" class="edit-carb" value="${f.carbs_g || 0}" min="0" step="0.1"></label>
-      </div>
-    </div>
-  `;
-
-  let foodFieldsHtml = (meal.foods ?? []).map((f, i) => getFoodItemHtml(f, i)).join('');
-
-  body.innerHTML = `
-    <h3>編輯餐點</h3>
-    <div class="edit-food-list" id="edit-food-list">${foodFieldsHtml}</div>
-    <button id="add-food-btn" class="btn btn-secondary btn-sm" style="margin-bottom: 1rem;">+ 新增項目</button>
-  `;
-
+function _showMealEditor({ meal }) {
+  const modal = document.getElementById('edit-modal'); const body = document.getElementById('edit-modal-body'); if (!modal || !body) return;
+  const foods = meal?.foods?.length ? meal.foods : [{}]; const time = _toDateTimeLocal(meal?.eaten_at || meal?.timestamp || new Date().toISOString());
+  body.innerHTML = `<div class="modal-intro"><span class="section-kicker">${meal ? '編輯紀錄' : '手動新增'}</span><h2>${meal ? '調整這餐的內容' : '輸入一餐'}</h2></div><div class="edit-top-grid"><label>餐別<select id="edit-meal-type" class="setting-input"><option ${meal?.meal_type === '早餐' ? 'selected' : ''}>早餐</option><option ${meal?.meal_type === '午餐' ? 'selected' : ''}>午餐</option><option ${meal?.meal_type === '晚餐' ? 'selected' : ''}>晚餐</option><option ${meal?.meal_type === '點心' ? 'selected' : ''}>點心</option><option ${meal?.meal_type === '其他' ? 'selected' : ''}>其他</option></select></label><label>實際用餐時間<input id="edit-eaten-at" class="setting-input" type="datetime-local" value="${time}"></label></div><div id="edit-food-list" class="edit-food-list">${foods.map((food, index) => _editFoodHtml(food, index)).join('')}</div><button id="add-food-btn" class="text-btn add-inline-btn">＋ 新增食物項目</button>`;
   modal.classList.remove('hidden');
-
-  const listContainer = document.getElementById('edit-food-list');
-
-  // Delete handler
-  listContainer.addEventListener('click', (e) => {
-    if (e.target.closest('.btn-delete-food')) {
-      const item = e.target.closest('.edit-food-item');
-      if (item) item.remove();
-    }
-  });
-
-  // Add handler
-  document.getElementById('add-food-btn')?.addEventListener('click', () => {
-    const emptyFood = { name: '', portion: '1份', calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 };
-    listContainer.insertAdjacentHTML('beforeend', getFoodItemHtml(emptyFood, Date.now()));
-  });
-
-  // Prevent multiple listeners
-  const oldSaveBtn = document.getElementById('edit-save-btn');
-  const saveBtn = oldSaveBtn.cloneNode(true);
-  oldSaveBtn.parentNode.replaceChild(saveBtn, oldSaveBtn);
-
-  const oldCancelBtn = document.getElementById('edit-cancel-btn');
-  const cancelBtn = oldCancelBtn.cloneNode(true);
-  oldCancelBtn.parentNode.replaceChild(cancelBtn, oldCancelBtn);
-
-  // Save handler
-  saveBtn.addEventListener('click', () => {
-    const items = listContainer.querySelectorAll('.edit-food-item');
-    const updatedFoods = [];
-    let totalCal = 0, totalPro = 0, totalFat = 0, totalCarb = 0;
-
-    items.forEach((item) => {
-      const name = item.querySelector('.edit-name')?.value || '未命名項目';
-      const portion = item.querySelector('.edit-portion')?.value || '';
-      const cal  = parseFloat(item.querySelector('.edit-cal')?.value)  || 0;
-      const pro  = parseFloat(item.querySelector('.edit-pro')?.value)  || 0;
-      const fat  = parseFloat(item.querySelector('.edit-fat')?.value)  || 0;
-      const carb = parseFloat(item.querySelector('.edit-carb')?.value) || 0;
-
-      updatedFoods.push({
-        name,
-        portion,
-        calories: cal,
-        protein_g: pro,
-        fat_g: fat,
-        carbs_g: carb,
-      });
-
-      totalCal  += cal;
-      totalPro  += pro;
-      totalFat  += fat;
-      totalCarb += carb;
-    });
-
-    const updatedMeal = {
-      ...meal,
-      foods: updatedFoods,
-      total_calories: Math.round(totalCal * 10) / 10,
-      total_protein_g: Math.round(totalPro * 10) / 10,
-      total_fat_g: Math.round(totalFat * 10) / 10,
-      total_carbs_g: Math.round(totalCarb * 10) / 10,
-    };
-
-    updateMeal(dateStr, mealId, updatedMeal);
-    modal.classList.add('hidden');
-    renderTodayMeals();
-    updateTodaySummary();
-    showToast('餐點已更新');
-  });
-
-  // Cancel handler
-  cancelBtn.addEventListener('click', () => {
-    modal.classList.add('hidden');
-  });
-
-  // Close on backdrop click
-  const backdropHandler = (e) => {
-    if (e.target === modal) {
-      modal.classList.add('hidden');
-      modal.removeEventListener('click', backdropHandler);
-    }
-  };
-  modal.addEventListener('click', backdropHandler);
+  const list = document.getElementById('edit-food-list'); list?.addEventListener('click', (event) => { if (event.target.closest('.btn-delete-food') && list.children.length > 1) event.target.closest('.edit-food-item')?.remove(); }); list?.addEventListener('change', (event) => { if (event.target.closest?.('.edit-food-item')) _scaleFoodNutrients(event.target, '.edit-quantity', ['.edit-cal', '.edit-pro', '.edit-fat', '.edit-carb']); });
+  document.getElementById('add-food-btn')?.addEventListener('click', () => list?.insertAdjacentHTML('beforeend', _editFoodHtml({}, list.children.length)));
+  _replaceModalButtons(async () => {
+    const rows = list ? Array.from(list.querySelectorAll('.edit-food-item')) : []; const updatedFoods = rows.map((row) => ({ name: row.querySelector('.edit-name')?.value.trim() || '未命名項目', portion: row.querySelector('.edit-portion')?.value.trim() || '', quantity: _numberValue(row.querySelector('.edit-quantity')?.value, 1), unit: row.querySelector('.edit-unit')?.value.trim() || '', weight_grams: _numberValue(row.querySelector('.edit-weight')?.value, 0), calories: _numberValue(row.querySelector('.edit-cal')?.value), protein_g: _numberValue(row.querySelector('.edit-pro')?.value), fat_g: _numberValue(row.querySelector('.edit-fat')?.value), carbs_g: _numberValue(row.querySelector('.edit-carb')?.value), source: row.querySelector('.edit-source')?.value.trim() || '手動', confidence: row.querySelector('.edit-confidence')?.value || 'medium' }));
+    if (!updatedFoods.some((food) => food.name && food.name !== '未命名項目')) { showToast('至少填寫一個食物名稱', 'error'); return; }
+    const totals = updatedFoods.reduce((sum, food) => ({ calories: sum.calories + food.calories, protein_g: sum.protein_g + food.protein_g, fat_g: sum.fat_g + food.fat_g, carbs_g: sum.carbs_g + food.carbs_g }), { calories: 0, protein_g: 0, fat_g: 0, carbs_g: 0 }); const eatenAt = new Date(document.getElementById('edit-eaten-at')?.value || new Date().toISOString()).toISOString(); const payload = { meal_type: document.getElementById('edit-meal-type')?.value || '其他', eaten_at: eatenAt, meal_date: eatenAt.slice(0, 10), foods: updatedFoods, total_calories: _round(totals.calories), total_protein_g: _round(totals.protein_g), total_fat_g: _round(totals.fat_g), total_carbs_g: _round(totals.carbs_g), confidence: updatedFoods.every((food) => food.confidence === 'high') ? 'high' : updatedFoods.some((food) => food.confidence === 'low') ? 'low' : 'medium', notes: meal?.notes || '' };
+    try { if (meal) await updateMeal(meal.id, payload); else await saveMeal(payload); modal.classList.add('hidden'); renderTodayMeals(); updateTodaySummary(); renderHistory(); showToast(meal ? '餐點已更新' : '餐點已新增'); } catch (error) { showToast(error.message || '儲存失敗', 'error'); }
+  }, meal ? '儲存修改' : '新增餐點');
 }
 
-// ── Confirm Modal ───────────────────────────────────────
+function _editFoodHtml(food = {}, index = 0) { return `<div class="edit-food-item" data-index="${index}"><div class="edit-food-header"><input class="edit-name" type="text" value="${_escapeHtml(food.name || '')}" placeholder="食物名稱"><button type="button" class="icon-btn btn-delete-food" title="刪除此項" aria-label="刪除食物">×</button></div><div class="edit-food-grid"><label>份量<input class="edit-portion" type="text" value="${_escapeHtml(food.portion || '')}" placeholder="1 碗"></label><label>數量<input class="edit-quantity" type="number" min="0" step="0.1" value="${_number(food.quantity, 1)}"></label><label>單位<input class="edit-unit" type="text" value="${_escapeHtml(food.unit || '')}" placeholder="份"></label><label>重量 g<input class="edit-weight" type="number" min="0" step="1" value="${_number(food.weight_grams, 0)}"></label></div><div class="edit-food-grid nutrient-grid"><label>熱量<input class="edit-cal" type="number" min="0" step="0.1" value="${_number(food.calories)}"></label><label>蛋白質<input class="edit-pro" type="number" min="0" step="0.1" value="${_number(food.protein_g)}"></label><label>脂肪<input class="edit-fat" type="number" min="0" step="0.1" value="${_number(food.fat_g)}"></label><label>碳水<input class="edit-carb" type="number" min="0" step="0.1" value="${_number(food.carbs_g)}"></label></div><div class="edit-food-meta"><label>來源<input class="edit-source" type="text" value="${_escapeHtml(food.source || '手動')}"></label><label>信心<select class="edit-confidence"><option value="high" ${food.confidence === 'high' ? 'selected' : ''}>高</option><option value="medium" ${!food.confidence || food.confidence === 'medium' ? 'selected' : ''}>中</option><option value="low" ${food.confidence === 'low' ? 'selected' : ''}>低</option></select></label></div></div>`; }
 
-/**
- * Shows a confirm dialog and returns a Promise<boolean>.
- */
-export function showConfirmModal(message) {
-  return new Promise((resolve) => {
-    const modal = document.getElementById('confirm-modal');
-    if (!modal) {
-      resolve(window.confirm(message));
-      return;
-    }
+export function showConfirmModal(message) { return new Promise((resolve) => { const modal = document.getElementById('confirm-modal'); if (!modal) { resolve(window.confirm(message)); return; } const body = modal.querySelector('.modal-body'); body.innerHTML = `<div class="confirm-content"><p class="confirm-message">${_escapeHtml(message)}</p><div class="modal-actions"><button id="confirm-yes-btn" class="btn btn-danger">確定</button><button id="confirm-no-btn" class="btn btn-secondary">取消</button></div></div>`; modal.classList.remove('hidden'); const close = (value) => { modal.classList.add('hidden'); resolve(value); }; document.getElementById('confirm-yes-btn')?.addEventListener('click', () => close(true), { once: true }); document.getElementById('confirm-no-btn')?.addEventListener('click', () => close(false), { once: true }); }); }
 
-    const body = modal.querySelector('.modal-body') ?? modal;
-
-    body.innerHTML = `
-      <div class="confirm-content">
-        <p class="confirm-message">${_escapeHtml(message)}</p>
-        <div class="modal-actions">
-          <button id="confirm-yes-btn" class="btn btn-primary">確定</button>
-          <button id="confirm-no-btn" class="btn btn-ghost">取消</button>
-        </div>
-      </div>
-    `;
-
-    modal.classList.remove('hidden');
-
-    const cleanup = () => {
-      modal.classList.add('hidden');
-      modal.removeEventListener('click', backdropHandler);
-    };
-
-    const backdropHandler = (e) => {
-      if (e.target === modal) {
-        cleanup();
-        resolve(false);
-      }
-    };
-
-    document.getElementById('confirm-yes-btn')?.addEventListener(
-      'click',
-      () => { cleanup(); resolve(true); },
-      { once: true }
-    );
-
-    document.getElementById('confirm-no-btn')?.addEventListener(
-      'click',
-      () => { cleanup(); resolve(false); },
-      { once: true }
-    );
-
-    modal.addEventListener('click', backdropHandler);
-  });
-}
-
-// ── Helpers ─────────────────────────────────────────────
-
-function _escapeHtml(str) {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-function _formatTime(timestamp) {
-  if (!timestamp) return '';
-  try {
-    const d = new Date(timestamp);
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  } catch {
-    return '';
-  }
-}
-
-function _getWeekday(dateStr) {
-  try {
-    const d = new Date(dateStr + 'T00:00:00');
-    const days = ['日', '一', '二', '三', '四', '五', '六'];
-    return `週${days[d.getDay()]}`;
-  } catch {
-    return '';
-  }
-}
-
-// ── Favorites ────────────────────────────────────────────
-
-/**
- * Renders the favorites list.
- */
 export function renderFavorites() {
-  const list = document.getElementById('favorites-list');
-  if (!list) return;
-
-  const items = getAllFavorites();
-
-  if (!items.length) {
-    list.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">⭐</div>
-        <p>還沒有常吃的食物</p>
-        <p class="empty-hint">點擊右上角「+ 新增」或在今日清單按 ⭐ 加入！</p>
-      </div>
-    `;
-    return;
-  }
-
-  list.innerHTML = items.map((item) => `
-    <div class="favorite-card glass-card" data-fav-id="${item.id}">
-      <div class="favorite-card-header">
-        <div class="favorite-info">
-          <h3 class="favorite-name">${_escapeHtml(item.name)}</h3>
-          <p class="favorite-desc">${_escapeHtml(item.description)}</p>
-        </div>
-        <div class="favorite-actions">
-          <button class="icon-btn fav-edit-btn" data-fav-id="${item.id}" title="編輯">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
-          <button class="icon-btn fav-add-today-btn" data-fav-id="${item.id}" title="加入今日">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
-          <button class="icon-btn fav-delete-btn" data-fav-id="${item.id}" title="刪除">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          </button>
-        </div>
-      </div>
-      <div class="favorite-nutrition">
-        <span class="fav-cal">🔥 ${item.total_calories} kcal</span>
-        <span>蛋白質 ${item.total_protein_g}g</span>
-        <span>脂肪 ${item.total_fat_g}g</span>
-        <span>碳水 ${item.total_carbs_g}g</span>
-      </div>
-    </div>
-  `).join('');
-
-  // Bind "Add to Today" buttons
-  list.querySelectorAll('.fav-add-today-btn').forEach((btn) => {
-    btn.addEventListener('click', () => _addFavToToday(btn.dataset.favId));
-  });
-
-  // Bind edit buttons
-  list.querySelectorAll('.fav-edit-btn').forEach((btn) => {
-    btn.addEventListener('click', () => showEditFavoriteModal(btn.dataset.favId));
-  });
-
-  // Bind delete buttons
-  list.querySelectorAll('.fav-delete-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const yes = await showConfirmModal('確定要從常吃清單刪除嗎？');
-      if (yes) {
-        deleteFavorite(btn.dataset.favId);
-        renderFavorites();
-        showToast('已從常吃清單移除');
-      }
-    });
-  });
+  const list = document.getElementById('favorites-list'); if (!list) return; const query = document.getElementById('favorites-search')?.value.trim().toLowerCase() || ''; const sort = document.getElementById('favorites-sort')?.value || 'smart'; let items = getAllFavorites().filter((item) => !query || `${item.name} ${item.description} ${item.category || ''}`.toLowerCase().includes(query)); items.sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name, 'zh-Hant') : sort === 'recent' ? String(b.last_used_at || '').localeCompare(String(a.last_used_at || '')) : sort === 'custom' ? Number(a.sort_order || 0) - Number(b.sort_order || 0) : Number(b.pinned) - Number(a.pinned) || String(b.last_used_at || b.updated_at || '').localeCompare(String(a.last_used_at || a.updated_at || '')));
+  if (!items.length) { list.innerHTML = `<div class="empty-state"><span class="empty-icon">☆</span><p>${query ? '找不到符合的常吃項目' : '還沒有常吃項目'}</p><p class="empty-hint">可從 AI 結果或今日紀錄加入。</p></div>`; return; }
+  list.innerHTML = items.map((item) => `<article class="favorite-card glass-card" data-fav-id="${_escapeHtml(item.id)}"><div class="favorite-card-header"><div class="favorite-info"><div class="favorite-meta"><span class="favorite-category">${_escapeHtml(item.category || '未分類')}</span>${item.pinned ? '<span class="pin-badge">已釘選</span>' : ''}</div><h2 class="favorite-name">${_escapeHtml(item.name)}</h2><p class="favorite-desc">${_escapeHtml(item.description || '尚未填寫描述')}</p></div><div class="favorite-actions"><button class="icon-btn fav-pin-btn" data-id="${_escapeHtml(item.id)}" title="${item.pinned ? '取消釘選' : '釘選'}" aria-label="釘選">${item.pinned ? '★' : '☆'}</button><button class="icon-btn fav-edit-btn" data-id="${_escapeHtml(item.id)}" title="編輯" aria-label="編輯">✎</button><button class="icon-btn fav-add-today-btn" data-id="${_escapeHtml(item.id)}" title="加入今日" aria-label="加入今日">＋</button><button class="icon-btn fav-delete-btn" data-id="${_escapeHtml(item.id)}" title="刪除" aria-label="刪除">⌫</button></div></div><div class="favorite-nutrition"><strong>${_number(item.total_calories)} kcal</strong><span>蛋白質 ${_number(item.total_protein_g)}g</span><span>脂肪 ${_number(item.total_fat_g)}g</span><span>碳水 ${_number(item.total_carbs_g)}g</span></div></article>`).join('');
+  list.querySelectorAll('.fav-pin-btn').forEach((button) => button.addEventListener('click', async () => { const item = getAllFavorites().find((favorite) => favorite.id === button.dataset.id); if (item) await updateFavorite(item.id, { ...item, pinned: !item.pinned }); renderFavorites(); }));
+  list.querySelectorAll('.fav-edit-btn').forEach((button) => button.addEventListener('click', () => showEditFavoriteModal(button.dataset.id)));
+  list.querySelectorAll('.fav-add-today-btn').forEach((button) => button.addEventListener('click', () => _addFavToToday(button.dataset.id)));
+  list.querySelectorAll('.fav-delete-btn').forEach((button) => button.addEventListener('click', async () => { if (!await showConfirmModal('確定要從常吃清單刪除嗎？')) return; await deleteFavorite(button.dataset.id); renderFavorites(); showToast('已從常吃清單移除'); }));
 }
 
-function _addFavToToday(favId) {
-  const { getFavoriteById } = _getFavModule();
-  const fav = getFavoriteById(favId);
-  if (!fav) return;
-
-  // Ask which meal type via a simple select modal
-  const mealTypes = ['早餐', '午餐', '晚餐', '點心'];
-  const select = document.createElement('select');
-  select.innerHTML = mealTypes.map(t => `<option value="${t}">${t}</option>`).join('');
-
-  const modal = document.getElementById('edit-modal');
-  const body = document.getElementById('edit-modal-body');
-  if (!modal || !body) return;
-
-  body.innerHTML = `
-    <h3>🍽️ 加入今日紀錄</h3>
-    <p style="margin-bottom: 1rem; color: var(--text-secondary);">選擇這餐要加到哪個時段：</p>
-    <select id="fav-meal-type-select" style="width:100%; padding:10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 1rem; margin-bottom: 1.5rem;">
-      <option value="早餐">🌅 早餐</option>
-      <option value="午餐">☀️ 午餐</option>
-      <option value="晚餐">🌙 晚餐</option>
-      <option value="點心">🍩 點心</option>
-    </select>
-  `;
-  modal.classList.remove('hidden');
-
-  const oldSave = document.getElementById('edit-save-btn');
-  const saveBtn = oldSave.cloneNode(true);
-  saveBtn.textContent = '✅ 加入今日';
-  oldSave.parentNode.replaceChild(saveBtn, oldSave);
-
-  const oldCancel = document.getElementById('edit-cancel-btn');
-  const cancelBtn = oldCancel.cloneNode(true);
-  oldCancel.parentNode.replaceChild(cancelBtn, oldCancel);
-
-  saveBtn.addEventListener('click', async () => {
-    const mealType = document.getElementById('fav-meal-type-select')?.value || '其他';
-    try {
-      await saveMeal({
-        meal_type: mealType,
-        foods: fav.foods,
-        total_calories: fav.total_calories,
-        total_protein_g: fav.total_protein_g,
-        total_fat_g: fav.total_fat_g,
-        total_carbs_g: fav.total_carbs_g,
-        notes: `來自常吃清單：${fav.name}`,
-      });
-      modal.classList.add('hidden');
-      showToast(`${fav.name} 已加入今日${mealType}！`);
-      if (typeof updateTodaySummary === 'function') updateTodaySummary();
-      renderTodayMeals();
-    } catch (err) {
-      showToast('新增失敗：' + (err.message || '請稍後再試'), 'error');
-    }
-  });
-
-  cancelBtn.addEventListener('click', () => modal.classList.add('hidden'));
+function _addFavToToday(id) {
+  const favorite = getAllFavorites().find((item) => item.id === id); const modal = document.getElementById('edit-modal'); const body = document.getElementById('edit-modal-body'); if (!favorite || !modal || !body) return;
+  body.innerHTML = `<div class="modal-intro"><span class="section-kicker">常吃清單</span><h2>加入今日紀錄</h2></div><p class="modal-copy">${_escapeHtml(favorite.name)} · ${_number(favorite.total_calories)} kcal</p><div class="edit-top-grid"><label>餐別<select id="fav-meal-type-select" class="setting-input"><option>早餐</option><option>午餐</option><option>晚餐</option><option>點心</option></select></label><label>份量倍數<input id="fav-quantity-multiplier" class="setting-input" type="number" min="0.1" max="10" step="0.1" value="1"></label></div>`; modal.classList.remove('hidden');
+  _replaceModalButtons(async () => { const multiplier = _numberValue(document.getElementById('fav-quantity-multiplier')?.value, 1); const now = new Date().toISOString(); try { await saveMeal({ meal_type: document.getElementById('fav-meal-type-select')?.value || '其他', eaten_at: now, foods: (favorite.foods || []).map((food) => ({ ...food, quantity: _numberValue(food.quantity, 1) * multiplier, calories: _numberValue(food.calories) * multiplier, protein_g: _numberValue(food.protein_g) * multiplier, fat_g: _numberValue(food.fat_g) * multiplier, carbs_g: _numberValue(food.carbs_g) * multiplier })), total_calories: _round(favorite.total_calories * multiplier), total_protein_g: _round(favorite.total_protein_g * multiplier), total_fat_g: _round(favorite.total_fat_g * multiplier), total_carbs_g: _round(favorite.total_carbs_g * multiplier), notes: `來自常吃清單：${favorite.name}` }); await updateFavorite(favorite.id, { ...favorite, last_used_at: now }); modal.classList.add('hidden'); renderFavorites(); showToast(`${favorite.name} 已加入今日`); } catch (error) { showToast(error.message || '新增失敗', 'error'); } }, '加入今日');
 }
 
-// Lazy import to avoid circular dep
-function _getFavModule() {
-  return { getFavoriteById: (id) => getAllFavorites().find(f => f.id === id) ?? null };
-}
-
-/**
- * Shows the add-favorite modal for manually adding a new favorite food.
- */
-export function showAddFavoriteModal() {
-  showFavoriteEditorModal({ mode: 'add' });
-}
-
-function showEditFavoriteModal(favId) {
-  const { getFavoriteById } = _getFavModule();
-  const favorite = getFavoriteById(favId);
-  if (!favorite) return;
-
-  showFavoriteEditorModal({ mode: 'edit', favorite });
-}
+export function showAddFavoriteModal() { showFavoriteEditorModal({ mode: 'add' }); }
+function showEditFavoriteModal(id) { const favorite = getAllFavorites().find((item) => item.id === id); if (favorite) showFavoriteEditorModal({ mode: 'edit', favorite }); }
 
 function showFavoriteEditorModal({ mode, favorite = null }) {
-  const modal = document.getElementById('edit-modal');
-  const body = document.getElementById('edit-modal-body');
-  if (!modal || !body) return;
-
-  const isEditing = mode === 'edit';
-  const foods = favorite?.foods?.length ? favorite.foods : [{}];
-
-  body.innerHTML = `
-    <h3>${isEditing ? '編輯常吃項目' : '新增常吃項目'}</h3>
-    <div class="nf-field" style="margin-bottom: 1rem;">
-      <label>名稱（整道餐點的名稱）</label>
-      <input id="new-fav-name" type="text" placeholder="例：水煮雞胸肉" value="${_escapeHtml(favorite?.name ?? '')}">
-    </div>
-    <div class="nf-field" style="margin-bottom: 1rem;">
-      <label>描述</label>
-      <textarea id="new-fav-description" rows="3" placeholder="例：雞胸肉 120g、白飯半碗">${_escapeHtml(favorite?.description ?? '')}</textarea>
-    </div>
-    <div id="new-fav-foods-list">
-      ${foods.map((food) => _getFavoriteFoodRowHtml(food)).join('')}
-    </div>
-    <button id="add-fav-row-btn" class="btn btn-secondary btn-sm" style="margin-bottom: 1rem;">+ 新增食物項目</button>
-  `;
-
-  modal.classList.remove('hidden');
-
-  const foodsList = document.getElementById('new-fav-foods-list');
-
-  foodsList.addEventListener('click', (e) => {
-    if (e.target.closest('.btn-delete-food')) {
-      const row = e.target.closest('.new-fav-food-row');
-      if (row && foodsList.children.length > 1) row.remove();
-    }
-  });
-
-  document.getElementById('add-fav-row-btn')?.addEventListener('click', () => {
-    foodsList.insertAdjacentHTML('beforeend', _getFavoriteFoodRowHtml());
-  });
-
-  const oldSave = document.getElementById('edit-save-btn');
-  const saveBtn = oldSave.cloneNode(true);
-  saveBtn.textContent = isEditing ? '儲存修改' : '儲存到常吃清單';
-  oldSave.parentNode.replaceChild(saveBtn, oldSave);
-
-  const oldCancel = document.getElementById('edit-cancel-btn');
-  const cancelBtn = oldCancel.cloneNode(true);
-  oldCancel.parentNode.replaceChild(cancelBtn, oldCancel);
-
-  saveBtn.addEventListener('click', async () => {
-    const item = buildFavoriteItemFromForm(_readFavoriteFormData(foodsList));
-
-    try {
-      saveBtn.disabled = true;
-      if (isEditing) {
-        await updateFavorite(favorite.id, item);
-      } else {
-        await addFavorite(item);
-      }
-      modal.classList.add('hidden');
-      renderFavorites();
-      showToast(isEditing ? `${item.name} 已更新` : `${item.name} 已加入常吃清單`);
-    } catch (err) {
-      showToast((isEditing ? '修改常吃失敗：' : '新增常吃失敗：') + (err.message || '請稍後再試'), 'error');
-    } finally {
-      saveBtn.disabled = false;
-    }
-  });
-
-  cancelBtn.addEventListener('click', () => modal.classList.add('hidden'));
+  const modal = document.getElementById('edit-modal'); const body = document.getElementById('edit-modal-body'); if (!modal || !body) return; const foods = favorite?.foods?.length ? favorite.foods : [{}]; const editing = mode === 'edit';
+  body.innerHTML = `<div class="modal-intro"><span class="section-kicker">常吃清單</span><h2>${editing ? '編輯常吃項目' : '新增常吃項目'}</h2></div><div class="edit-top-grid"><label>名稱<input id="new-fav-name" class="setting-input" type="text" value="${_escapeHtml(favorite?.name || '')}" placeholder="例：水煮雞胸肉"></label><label>分類<input id="new-fav-category" class="setting-input" type="text" value="${_escapeHtml(favorite?.category || '')}" placeholder="早餐／午餐／自訂"></label></div><label class="modal-field">描述<textarea id="new-fav-description" class="setting-input favorite-description-input" rows="3" placeholder="例如：雞胸肉 120g、青菜">${_escapeHtml(favorite?.description || '')}</textarea></label><label class="switch-row modal-switch"><span><strong>釘選在最前</strong><small>常用項目可快速找到</small></span><input id="new-fav-pinned" type="checkbox" ${favorite?.pinned ? 'checked' : ''}><span class="switch-control" aria-hidden="true"></span></label><div id="new-fav-foods-list" class="edit-food-list">${foods.map((food, index) => _editFavoriteFoodHtml(food, index)).join('')}</div><button id="add-fav-row-btn" class="text-btn add-inline-btn">＋ 新增食物項目</button>`;
+  modal.classList.remove('hidden'); const foodsList = document.getElementById('new-fav-foods-list'); foodsList?.addEventListener('click', (event) => { if (event.target.closest('.btn-delete-food') && foodsList.children.length > 1) event.target.closest('.edit-food-item')?.remove(); }); foodsList?.addEventListener('change', (event) => { if (event.target.closest?.('.edit-food-item')) _scaleFoodNutrients(event.target, '.nf-quantity', ['.nf-cal', '.nf-pro', '.nf-fat', '.nf-carb']); }); document.getElementById('add-fav-row-btn')?.addEventListener('click', () => foodsList?.insertAdjacentHTML('beforeend', _editFavoriteFoodHtml({}, foodsList.children.length)));
+  _replaceModalButtons(async () => { const item = buildFavoriteItemFromForm(_readFavoriteFormData(foodsList)); const full = { ...item, category: document.getElementById('new-fav-category')?.value.trim() || '', pinned: document.getElementById('new-fav-pinned')?.checked || false }; try { if (editing) await updateFavorite(favorite.id, full); else await addFavorite(full); modal.classList.add('hidden'); renderFavorites(); showToast(editing ? '常吃項目已更新' : '已加入常吃清單'); } catch (error) { showToast(error.message || '常吃項目儲存失敗', 'error'); } }, editing ? '儲存修改' : '加入常吃');
 }
 
-function _getFavoriteFoodRowHtml(food = {}) {
-  return `
-    <div class="new-fav-food-row">
-      <div class="nf-row-header">
-        <span class="nf-row-label">食物項目</span>
-        <button type="button" class="btn-delete-food" title="刪除此項">刪除</button>
-      </div>
-      <div class="nf-field">
-        <label>食物名稱</label>
-        <input type="text" class="nf-name" placeholder="例：白飯" value="${_escapeHtml(food.name ?? '')}">
-      </div>
-      <div class="nf-field">
-        <label>份量</label>
-        <input type="text" class="nf-portion" placeholder="例：1碗 (150g)" value="${_escapeHtml(food.portion ?? '')}">
-      </div>
-      <div class="nf-fields-grid">
-        <div class="nf-field">
-          <label>熱量 (kcal)</label>
-          <input type="number" class="nf-cal" placeholder="0" min="0" step="1" value="${_escapeHtml(food.calories ?? '')}">
-        </div>
-        <div class="nf-field">
-          <label>蛋白質 (g)</label>
-          <input type="number" class="nf-pro" placeholder="0" min="0" step="0.1" value="${_escapeHtml(food.protein_g ?? '')}">
-        </div>
-        <div class="nf-field">
-          <label>脂肪 (g)</label>
-          <input type="number" class="nf-fat" placeholder="0" min="0" step="0.1" value="${_escapeHtml(food.fat_g ?? '')}">
-        </div>
-        <div class="nf-field">
-          <label>碳水 (g)</label>
-          <input type="number" class="nf-carb" placeholder="0" min="0" step="0.1" value="${_escapeHtml(food.carbs_g ?? '')}">
-        </div>
-      </div>
-    </div>
-  `;
-}
+function _editFavoriteFoodHtml(food = {}, index = 0) { return `<div class="edit-food-item" data-index="${index}"><div class="edit-food-header"><input class="edit-name nf-name" type="text" value="${_escapeHtml(food.name || '')}" placeholder="食物名稱"><button type="button" class="icon-btn btn-delete-food" title="刪除此項" aria-label="刪除食物">×</button></div><div class="edit-food-grid"><label>份量<input class="edit-portion nf-portion" type="text" value="${_escapeHtml(food.portion || '')}" placeholder="1 碗"></label><label>數量<input class="edit-quantity nf-quantity" type="number" min="0" step="0.1" value="${_number(food.quantity, 1)}"></label><label>單位<input class="edit-unit nf-unit" type="text" value="${_escapeHtml(food.unit || '')}" placeholder="份"></label><label>重量 g<input class="edit-weight nf-weight" type="number" min="0" step="1" value="${_number(food.weight_grams, 0)}"></label></div><div class="edit-food-grid nutrient-grid"><label>熱量<input class="edit-cal nf-cal" type="number" min="0" step="0.1" value="${_number(food.calories)}"></label><label>蛋白質<input class="edit-pro nf-pro" type="number" min="0" step="0.1" value="${_number(food.protein_g)}"></label><label>脂肪<input class="edit-fat nf-fat" type="number" min="0" step="0.1" value="${_number(food.fat_g)}"></label><label>碳水<input class="edit-carb nf-carb" type="number" min="0" step="0.1" value="${_number(food.carbs_g)}"></label></div><div class="edit-food-meta"><label>來源<input class="edit-source nf-source" type="text" value="${_escapeHtml(food.source || '手動')}"></label><label>信心<select class="edit-confidence nf-confidence"><option value="high" ${food.confidence === 'high' ? 'selected' : ''}>高</option><option value="medium" ${!food.confidence || food.confidence === 'medium' ? 'selected' : ''}>中</option><option value="low" ${food.confidence === 'low' ? 'selected' : ''}>低</option></select></label></div></div>`; }
 
-function _readFavoriteFormData(foodsList) {
-  return {
-    name: document.getElementById('new-fav-name')?.value ?? '',
-    description: document.getElementById('new-fav-description')?.value ?? '',
-    foods: Array.from(foodsList.querySelectorAll('.new-fav-food-row')).map((row) => ({
-      name: row.querySelector('.nf-name')?.value ?? '',
-      portion: row.querySelector('.nf-portion')?.value ?? '',
-      calories: row.querySelector('.nf-cal')?.value ?? 0,
-      protein_g: row.querySelector('.nf-pro')?.value ?? 0,
-      fat_g: row.querySelector('.nf-fat')?.value ?? 0,
-      carbs_g: row.querySelector('.nf-carb')?.value ?? 0,
-    })),
-  };
+function _readFavoriteFormData(list) { return { name: document.getElementById('new-fav-name')?.value || '', description: document.getElementById('new-fav-description')?.value || '', foods: list ? Array.from(list.querySelectorAll('.edit-food-item')).map((row) => ({ name: row.querySelector('.nf-name')?.value || '', portion: row.querySelector('.nf-portion')?.value || '', quantity: _numberValue(row.querySelector('.nf-quantity')?.value, 1), unit: row.querySelector('.nf-unit')?.value || '', weight_grams: _numberValue(row.querySelector('.nf-weight')?.value, 0), calories: _numberValue(row.querySelector('.nf-cal')?.value), protein_g: _numberValue(row.querySelector('.nf-pro')?.value), fat_g: _numberValue(row.querySelector('.nf-fat')?.value), carbs_g: _numberValue(row.querySelector('.nf-carb')?.value), source: row.querySelector('.nf-source')?.value || '手動', confidence: row.querySelector('.nf-confidence')?.value || 'medium' })) : [] }; }
+
+function _replaceModalButtons(onSave, saveLabel) { const save = document.getElementById('edit-save-btn'); const cancel = document.getElementById('edit-cancel-btn'); if (!save || !cancel) return; const newSave = save.cloneNode(true); const newCancel = cancel.cloneNode(true); newSave.textContent = saveLabel; save.replaceWith(newSave); cancel.replaceWith(newCancel); newSave.addEventListener('click', onSave); newCancel.addEventListener('click', () => document.getElementById('edit-modal')?.classList.add('hidden')); document.querySelector('#edit-modal [data-action="close-modal"]')?.addEventListener('click', () => document.getElementById('edit-modal')?.classList.add('hidden')); }
+
+function _foodPortion(food) { return food.quantity && food.unit ? `${food.quantity}${food.unit}` : food.portion || (food.weight_grams ? `${food.weight_grams}g` : ''); }
+function _escapeHtml(value) { const div = document.createElement('div'); div.textContent = value == null ? '' : String(value); return div.innerHTML; }
+function _formatTime(value) { if (!value) return ''; const date = new Date(value); return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }); }
+function _getWeekday(date) { const day = new Date(`${date}T00:00:00`).getDay(); return `週${['日', '一', '二', '三', '四', '五', '六'][day]}`; }
+function _toDateTimeLocal(value) { const date = new Date(value); if (Number.isNaN(date.getTime())) return ''; const pad = (number) => String(number).padStart(2, '0'); return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`; }
+function _number(value, fallback = 0) { const number = Number(value); return Number.isFinite(number) ? (Number.isInteger(number) ? String(number) : String(Math.round(number * 10) / 10)) : String(fallback); }
+function _numberValue(value, fallback = 0) { const number = Number.parseFloat(value); return Number.isFinite(number) ? number : fallback; }
+function _round(value) { return Math.round((Number(value) || 0) * 10) / 10; }
+
+function _scaleFoodNutrients(target, quantitySelector, nutrientSelectors) {
+  if (!target.matches?.(quantitySelector)) return;
+  const row = target.closest('.analysis-food-row, .edit-food-item'); if (!row) return;
+  const next = _numberValue(target.value, 1); const previous = _numberValue(row.dataset.previousQuantity || target.defaultValue, 1);
+  if (previous > 0 && next >= 0) nutrientSelectors.forEach((selector) => { const input = row.querySelector(selector); if (input) input.value = _round(_numberValue(input.value) * next / previous); });
+  row.dataset.previousQuantity = String(next);
 }

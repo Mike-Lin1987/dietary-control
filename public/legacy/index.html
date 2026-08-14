@@ -2,284 +2,112 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="NutriLens 智慧飲食追蹤 — 使用 AI 辨識食物照片，自動計算營養成分與熱量，輕鬆管理每日飲食紀錄。">
-  <title>NutriLens — 智慧飲食追蹤</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23080810'/%3E%3Ccircle cx='31' cy='33' r='18' fill='%2310b981'/%3E%3Ccircle cx='31' cy='33' r='9' fill='%23080810' opacity='.26'/%3E%3Cpath d='M39 17c8-5 15-2 16 6-7 2-13 0-16-6Z' fill='%2306b6d4'/%3E%3Cpath d='M30 15c1-5 5-8 10-8 1 7-2 12-9 14Z' fill='%2310b981'/%3E%3C/svg%3E">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1117">
+  <meta name="description" content="NutriLens 智慧飲食追蹤">
+  <title>NutriLens｜智慧飲食追蹤</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%230b1117'/%3E%3Ccircle cx='31' cy='33' r='18' fill='%2310b981'/%3E%3Ccircle cx='31' cy='33' r='9' fill='%230b1117' opacity='.26'/%3E%3Cpath d='M39 17c8-5 15-2 16 6-7 2-13 0-16-6Z' fill='%2306b6d4'/%3E%3Cpath d='M30 15c1-5 5-8 10-8 1 7-2 12-9 14Z' fill='%2310b981'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-
-<!-- Loading Overlay -->
-<div id="loading-overlay" class="loading-overlay hidden">
-  <div class="loading-spinner">
-    <div class="spinner-ring"></div>
-    <p class="loading-text">AI 分析中...</p>
-  </div>
+<div id="loading-overlay" class="loading-overlay hidden" role="status" aria-live="polite">
+  <div class="loading-spinner"><div class="spinner-ring"></div><p id="loading-text" class="loading-text">AI 分析中…</p></div>
 </div>
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
 
-<!-- Toast Container -->
-<div id="toast-container" class="toast-container"></div>
-
-<!-- Main App -->
 <div id="app" class="hidden">
-  <!-- Header -->
   <header class="app-header">
-    <div class="header-left">
-      <h1 class="app-title">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-name">NutriLens</span>
-      </h1>
-      <p class="app-subtitle">智慧飲食追蹤</p>
+    <div class="header-brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <div class="brand-name">NutriLens</div>
+        <div class="app-subtitle">智慧飲食追蹤</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span id="sync-status" class="sync-status">已同步</span>
+      <button class="icon-btn header-help-btn" data-action="show-help" title="查看狀態" aria-label="查看狀態">?</button>
     </div>
   </header>
 
-  <!-- Views Container -->
   <main id="views-container" class="views-container">
+    <section id="view-camera" class="view active" aria-labelledby="today-heading">
+      <div class="page-heading compact-heading">
+        <div><p class="eyebrow">今天</p><h1 id="today-heading">今日總覽</h1></div>
+        <span id="today-date" class="date-badge"></span>
+      </div>
 
-    <!-- View 1: Camera / Analyze -->
-    <section id="view-camera" class="view active">
-      <!-- Today's Summary Card -->
       <div class="summary-card glass-card">
-        <div class="summary-header">
-          <h2>今日攝取</h2>
-          <span id="today-date" class="date-badge"></span>
-        </div>
+        <div class="summary-topline"><div><span class="section-kicker">今日攝取</span><strong id="today-status" class="status-pill status-neutral">尚未開始</strong></div><span id="today-meal-count" class="muted-label">0 餐</span></div>
         <div class="summary-body">
           <div class="calorie-ring-container">
-            <div id="calorie-ring" class="calorie-ring">
-              <div class="calorie-ring-inner">
-                <span id="calories-consumed" class="calories-number">0</span>
-                <span class="calories-unit">kcal</span>
-                <span id="calories-goal" class="calories-goal">/ 0</span>
-              </div>
-            </div>
+            <div id="calorie-ring" class="calorie-ring"><div class="calorie-ring-inner"><span id="calories-consumed" class="calories-number">0</span><span class="calories-unit">kcal</span><span id="calories-goal" class="calories-goal">/ 2000</span></div></div>
           </div>
           <div class="macro-bars">
-            <div class="macro-bar-item">
-              <div class="macro-bar-header">
-                <span class="macro-dot protein-dot"></span>
-                <span>蛋白質</span>
-                <span id="summary-protein" class="macro-value">0g</span>
-              </div>
-              <div class="macro-bar-track"><div id="protein-bar" class="macro-bar-fill protein-fill"></div></div>
-            </div>
-            <div class="macro-bar-item">
-              <div class="macro-bar-header">
-                <span class="macro-dot fat-dot"></span>
-                <span>脂肪</span>
-                <span id="summary-fat" class="macro-value">0g</span>
-              </div>
-              <div class="macro-bar-track"><div id="fat-bar" class="macro-bar-fill fat-fill"></div></div>
-            </div>
-            <div class="macro-bar-item">
-              <div class="macro-bar-header">
-                <span class="macro-dot carbs-dot"></span>
-                <span>碳水化合物</span>
-                <span id="summary-carbs" class="macro-value">0g</span>
-              </div>
-              <div class="macro-bar-track"><div id="carbs-bar" class="macro-bar-fill carbs-fill"></div></div>
-            </div>
+            <div class="macro-bar-item"><div class="macro-bar-header"><span class="macro-dot protein-dot"></span><span>蛋白質</span><span id="summary-protein" class="macro-value">0g</span></div><div class="macro-bar-track"><div id="protein-bar" class="macro-bar-fill protein-fill"></div></div><div id="summary-protein-status" class="macro-status">尚不足</div></div>
+            <div class="macro-bar-item"><div class="macro-bar-header"><span class="macro-dot fat-dot"></span><span>脂肪</span><span id="summary-fat" class="macro-value">0g</span></div><div class="macro-bar-track"><div id="fat-bar" class="macro-bar-fill fat-fill"></div></div><div id="summary-fat-status" class="macro-status">尚不足</div></div>
+            <div class="macro-bar-item"><div class="macro-bar-header"><span class="macro-dot carbs-dot"></span><span>碳水化合物</span><span id="summary-carbs" class="macro-value">0g</span></div><div class="macro-bar-track"><div id="carbs-bar" class="macro-bar-fill carbs-fill"></div></div><div id="summary-carbs-status" class="macro-status">尚不足</div></div>
           </div>
         </div>
+        <div class="summary-footer"><span>已攝取 <strong id="summary-consumed-text">0 kcal</strong></span><span>剩餘 <strong id="summary-remaining-text">2000 kcal</strong></span></div>
       </div>
 
-      <!-- Camera Capture Area -->
-      <div class="capture-area glass-card">
-        <div id="photo-preview-container" class="photo-preview-container hidden">
-          <img id="photo-preview" class="photo-preview" alt="食物照片預覽">
-          <button id="clear-photo-btn" class="clear-photo-btn" title="清除照片">✕</button>
-        </div>
-        <div id="capture-placeholder" class="capture-placeholder">
-          <div class="capture-icon">📸</div>
-          <p>拍攝或上傳食物照片</p>
-          <p class="capture-hint">AI 將自動辨識食物並計算營養成分</p>
-        </div>
+      <div id="today-insight" class="insight-strip"><span class="insight-icon" aria-hidden="true">i</span><span>先記錄第一餐，今天的趨勢會更準確。</span></div>
+      <div id="today-meal-summary" class="today-meal-summary" aria-label="今日餐別摘要"></div>
+
+      <div class="capture-area glass-card compact-capture">
+        <div class="capture-header"><div><span class="section-kicker">快速記錄</span><h2>拍照辨識餐點</h2></div><span class="capture-note">照片預設不儲存</span></div>
+        <div id="photo-preview-container" class="photo-preview-container hidden"><img id="photo-preview" class="photo-preview" alt="食物照片預覽"><button id="clear-photo-btn" class="clear-photo-btn" title="清除照片" aria-label="清除照片">×</button></div>
+        <div id="capture-placeholder" class="capture-placeholder"><span class="capture-icon" aria-hidden="true">+</span><p>選擇一張餐點照片</p><p class="capture-hint">AI 會先辨識，再由你確認後儲存</p></div>
         <input type="file" id="file-input" accept="image/*" capture="environment" class="hidden">
-
-        <div class="meal-type-selector">
-          <label for="meal-type-select">這餐是：</label>
-          <select id="meal-type-select" class="setting-input select-input">
-            <option value="自動判斷">🕒 依時間自動判斷</option>
-            <option value="早餐">🌅 早餐</option>
-            <option value="午餐">☀️ 午餐</option>
-            <option value="晚餐">🌙 晚餐</option>
-            <option value="點心">🍩 點心</option>
-          </select>
-        </div>
-
-        <div class="capture-actions">
-          <button id="capture-btn" class="btn btn-primary btn-capture">
-            <span class="btn-icon">📷</span> 拍照
-          </button>
-          <button id="upload-btn" class="btn btn-secondary">
-            <span class="btn-icon">🖼️</span> 上傳
-          </button>
-          <button id="analyze-btn" class="btn btn-accent hidden">
-            <span class="btn-icon">✨</span> 開始分析
-          </button>
-        </div>
+        <div class="capture-settings"><label for="meal-type-select">餐別</label><select id="meal-type-select" class="setting-input select-input"><option value="自動判斷">依時間自動判斷</option><option value="早餐">早餐</option><option value="午餐">午餐</option><option value="晚餐">晚餐</option><option value="點心">點心</option></select></div>
+        <div class="capture-actions"><button id="capture-btn" class="btn btn-primary"><span class="btn-icon" aria-hidden="true">⌾</span>拍照</button><button id="upload-btn" class="btn btn-secondary"><span class="btn-icon" aria-hidden="true">▣</span>從相簿選取</button><button id="analyze-btn" class="btn btn-accent hidden"><span class="btn-icon" aria-hidden="true">✦</span>開始分析</button></div>
       </div>
-
-      <!-- Analysis Results -->
-      <div id="results-container" class="results-container hidden">
-        <!-- Results will be rendered by JS -->
-      </div>
+      <div id="results-container" class="results-container hidden"></div>
     </section>
 
-    <!-- View 2: Today's Meals -->
-    <section id="view-today" class="view">
-      <div class="view-header">
-        <h2>📋 今日飲食紀錄</h2>
-      </div>
-      <div id="today-meals-list" class="meals-list">
-        <div class="empty-state">
-          <span class="empty-icon">🍽️</span>
-          <p>今天還沒有紀錄</p>
-          <p class="empty-hint">去拍張照片開始記錄吧！</p>
-        </div>
-      </div>
+    <section id="view-today" class="view" aria-labelledby="records-heading">
+      <div class="page-heading"><div><p class="eyebrow">飲食紀錄</p><h1 id="records-heading">今天吃了什麼</h1></div><div class="heading-actions"><button class="btn btn-secondary btn-sm" data-action="show-favorites">常吃管理</button><button class="btn btn-primary btn-sm" data-action="open-add"><span aria-hidden="true">+</span> 新增</button></div></div>
+      <div class="record-filter-row"><span id="record-date-label" class="muted-label"></span><button class="text-btn" data-action="go-today">回到今天</button></div>
+      <div id="today-meals-list" class="meals-list"><div class="empty-state"><span class="empty-icon">○</span><p>今天還沒有紀錄</p><p class="empty-hint">用下方「＋」新增第一餐。</p></div></div>
     </section>
 
-    <!-- View 3: Favorites -->
-    <section id="view-favorites" class="view">
-      <div class="view-header">
-        <h2>⭐ 常吃清單</h2>
-        <button id="add-favorite-btn" class="btn btn-primary btn-sm">+ 新增</button>
-      </div>
-      <div id="favorites-list" class="favorites-list">
-        <div class="empty-state">
-          <span class="empty-icon">⭐</span>
-          <p>還沒有常吃的食物</p>
-        </div>
-      </div>
+    <section id="view-favorites" class="view" aria-labelledby="favorites-heading">
+      <div class="page-heading"><div><p class="eyebrow">快速新增</p><h1 id="favorites-heading">常吃清單</h1></div><button id="add-favorite-btn" class="btn btn-primary btn-sm"><span aria-hidden="true">+</span> 新增</button></div>
+      <div class="favorites-toolbar"><label class="search-field"><span aria-hidden="true">⌕</span><input id="favorites-search" type="search" placeholder="搜尋名稱或描述" autocomplete="off"></label><select id="favorites-sort" class="setting-input compact-select" aria-label="常吃排序"><option value="smart">常用優先</option><option value="recent">最近使用</option><option value="name">名稱排序</option><option value="custom">自訂排序</option></select></div>
+      <div id="favorites-list" class="favorites-list"><div class="empty-state"><span class="empty-icon">☆</span><p>還沒有常吃項目</p></div></div>
     </section>
 
-    <!-- View 4: History -->
-    <section id="view-history" class="view">
-      <div class="view-header">
-        <h2>📊 歷史紀錄</h2>
-        <input type="date" id="history-date-picker" class="date-picker">
-      </div>
-      <div id="history-list" class="history-list">
-        <div class="empty-state">
-          <span class="empty-icon">📅</span>
-          <p>還沒有歷史紀錄</p>
-        </div>
-      </div>
+    <section id="view-history" class="view" aria-labelledby="trend-heading">
+      <div class="page-heading"><div><p class="eyebrow">長期觀察</p><h1 id="trend-heading">趨勢</h1></div><select id="trend-range" class="setting-input compact-select" aria-label="趨勢期間"><option value="7">近 7 天</option><option value="14">近 14 天</option><option value="30">近 30 天</option></select></div>
+      <div id="trend-summary" class="trend-summary glass-card"></div>
+      <div class="history-toolbar"><label for="history-date-picker">查看指定日期</label><input type="date" id="history-date-picker" class="date-picker"><button class="text-btn" data-action="clear-history-filter">清除篩選</button></div>
+      <div id="trend-chart" class="trend-chart glass-card"></div>
+      <div id="trend-protein-chart" class="trend-chart glass-card"></div>
+      <div class="subsection-heading"><h2>每日紀錄</h2><span class="muted-label">點擊日期展開</span></div>
+      <div id="history-list" class="history-list"><div class="empty-state"><span class="empty-icon">□</span><p>還沒有歷史紀錄</p></div></div>
     </section>
 
-    <!-- View 4: Settings -->
-    <section id="view-settings" class="view">
-      <div class="view-header">
-        <h2>⚙️ 設定</h2>
-      </div>
+    <section id="view-settings" class="view" aria-labelledby="settings-heading">
+      <div class="page-heading"><div><p class="eyebrow">個人化</p><h1 id="settings-heading">設定</h1></div></div>
       <div class="settings-list">
-        <div class="settings-group glass-card">
-          <h3>🎯 每日目標</h3>
-          <div class="setting-item">
-            <label for="goal-calories">目標熱量 (kcal)</label>
-            <input type="number" id="goal-calories" class="setting-input" value="1500" min="800" max="5000" step="50">
-          </div>
-          <div class="setting-item">
-            <label for="goal-protein">目標蛋白質 (g)</label>
-            <input type="number" id="goal-protein" class="setting-input" value="120" min="10" max="500" step="5">
-          </div>
-          <div class="setting-item">
-            <label for="goal-fat">目標脂肪 (g)</label>
-            <input type="number" id="goal-fat" class="setting-input" value="50" min="10" max="300" step="5">
-          </div>
-          <div class="setting-item">
-            <label for="goal-carbs">目標碳水化合物 (g)</label>
-            <input type="number" id="goal-carbs" class="setting-input" value="200" min="20" max="600" step="5">
-          </div>
-          <button id="save-goal-btn" class="btn btn-primary">💾 儲存目標</button>
-        </div>
-
-        <div id="api-key-settings" class="settings-group glass-card hidden">
-          <h3>🔑 AI 設定</h3>
-          <div class="setting-item">
-            <label for="api-key-input">OpenAI API Key</label>
-            <input type="password" id="api-key-input" class="setting-input api-key-input" placeholder="sk-...">
-          </div>
-          <p class="setting-help setting-help-full">Key 只會存在此瀏覽器的 localStorage，不會上傳到 Firebase。瀏覽器端使用 API key 風險較高，僅建議個人使用。</p>
-          <p id="api-key-status" class="setting-status">尚未儲存</p>
-          <div class="settings-actions-row">
-            <button id="save-api-key-btn" class="btn btn-primary">💾 儲存金鑰</button>
-            <button id="clear-api-key-btn" class="btn btn-ghost hidden">清除金鑰</button>
-          </div>
-        </div>
-
-        <div class="settings-group glass-card">
-          <h3>📤 資料管理</h3>
-          <button id="export-btn" class="btn btn-secondary">📥 匯出 JSON 資料</button>
-          <button id="import-btn" class="btn btn-secondary">📤 匯入 JSON 資料</button>
-          <input type="file" id="import-file-input" accept=".json" class="hidden">
-          <button id="clear-data-btn" class="btn btn-danger">🗑️ 清除所有資料</button>
-        </div>
+        <div class="settings-group glass-card"><div class="group-heading"><span class="group-icon">◎</span><div><h2>每日目標</h2><p>用於今日進度與趨勢判讀</p></div></div><div class="settings-grid"><div class="setting-item"><label for="goal-calories">熱量 kcal</label><input type="number" id="goal-calories" class="setting-input" value="2000" min="500" max="10000" step="50"></div><div class="setting-item"><label for="goal-protein">蛋白質 g</label><input type="number" id="goal-protein" class="setting-input" value="130" min="0" max="1000" step="5"></div><div class="setting-item"><label for="goal-fat">脂肪 g</label><input type="number" id="goal-fat" class="setting-input" value="60" min="0" max="1000" step="5"></div><div class="setting-item"><label for="goal-carbs">碳水 g</label><input type="number" id="goal-carbs" class="setting-input" value="200" min="0" max="2000" step="5"></div></div><button id="save-goal-btn" class="btn btn-primary full-btn">儲存目標</button></div>
+        <div class="settings-group glass-card"><div class="group-heading"><span class="group-icon">▣</span><div><h2>照片與資料</h2><p>辨識完成後仍會先由你確認</p></div></div><label class="switch-row"><span><strong>儲存餐點照片</strong><small>開啟後才會上傳照片到帳號</small></span><input id="save-meal-photos" type="checkbox"><span class="switch-control" aria-hidden="true"></span></label><div class="settings-divider"></div><button id="export-btn" class="btn btn-secondary full-btn">匯出 v2 JSON</button><button id="export-csv-btn" class="btn btn-secondary full-btn">匯出 CSV</button><button id="import-btn" class="btn btn-secondary full-btn">匯入資料</button><input type="file" id="import-file-input" accept=".json,application/json" class="hidden"><p class="setting-help">匯入前會自動下載目前資料備份；支援舊版 Firebase、Sites v1 與 v2 格式。</p></div>
+        <div class="settings-group danger-group glass-card"><div class="group-heading"><span class="group-icon danger-text">!</span><div><h2>危險區域</h2><p>刪除前請先匯出備份</p></div></div><button id="clear-data-btn" class="btn btn-danger full-btn">清除所有資料</button></div>
       </div>
     </section>
   </main>
 
-  <!-- Bottom Tab Bar -->
-  <nav class="tab-bar">
-    <button class="tab-item active" data-view="view-camera">
-      <span class="tab-icon">📸</span>
-      <span class="tab-label">拍照</span>
-    </button>
-    <button class="tab-item" data-view="view-today">
-      <span class="tab-icon">📋</span>
-      <span class="tab-label">今日</span>
-    </button>
-    <button class="tab-item" data-view="view-favorites">
-      <span class="tab-icon">⭐</span>
-      <span class="tab-label">常吃</span>
-    </button>
-    <button class="tab-item" data-view="view-history">
-      <span class="tab-icon">📊</span>
-      <span class="tab-label">歷史</span>
-    </button>
-    <button class="tab-item" data-view="view-settings">
-      <span class="tab-icon">⚙️</span>
-      <span class="tab-label">設定</span>
-    </button>
-  </nav>
+  <nav class="tab-bar" aria-label="主要導覽"><button class="tab-item active" data-view="view-camera"><span class="tab-icon">⌂</span><span class="tab-label">今日</span></button><button class="tab-item" data-view="view-today"><span class="tab-icon">☷</span><span class="tab-label">紀錄</span></button><button class="tab-item tab-add" data-action="open-add" aria-label="新增餐點"><span class="add-icon">+</span><span class="tab-label">新增</span></button><button class="tab-item" data-view="view-history"><span class="tab-icon">▥</span><span class="tab-label">趨勢</span></button><button class="tab-item" data-view="view-settings"><span class="tab-icon">⚙</span><span class="tab-label">設定</span></button></nav>
 </div>
 
-<!-- Modal for editing meal -->
-<div id="edit-modal" class="modal hidden">
-  <div class="modal-backdrop"></div>
-  <div class="modal-content glass-card">
-    <div class="modal-header">
-      <h3>✏️ 編輯餐食</h3>
-    </div>
-    <div id="edit-modal-body" class="modal-body">
-      <!-- Filled by JS -->
-    </div>
-    <div class="modal-footer">
-      <button id="edit-save-btn" class="btn btn-primary">儲存修改</button>
-      <button id="edit-cancel-btn" class="btn btn-secondary">取消</button>
-    </div>
-  </div>
-</div>
+<div id="add-sheet" class="sheet hidden" aria-hidden="true"><div class="sheet-backdrop"></div><div class="sheet-content"><div class="sheet-handle"></div><div class="sheet-heading"><div><p class="eyebrow">快速新增</p><h2>今天要記錄什麼？</h2></div><button class="icon-btn" data-action="close-add" title="關閉" aria-label="關閉">×</button></div><div class="add-options"><button class="add-option" data-add-method="camera"><span class="option-icon">⌾</span><span><strong>拍照辨識</strong><small>用相機拍下餐點</small></span><span>›</span></button><button class="add-option" data-add-method="gallery"><span class="option-icon">▣</span><span><strong>從相簿選取</strong><small>使用既有照片</small></span><span>›</span></button><button class="add-option" data-add-method="manual"><span class="option-icon">＋</span><span><strong>手動輸入</strong><small>自己填寫營養數值</small></span><span>›</span></button><button class="add-option" data-add-method="favorite"><span class="option-icon">☆</span><span><strong>常吃清單</strong><small>一鍵加入常用餐點</small></span><span>›</span></button><button class="add-option" data-add-method="recent"><span class="option-icon">↻</span><span><strong>最近吃過</strong><small>複製最近一餐資料</small></span><span>›</span></button><button class="add-option" data-add-method="previous"><span class="option-icon">←</span><span><strong>複製上一餐</strong><small>沿用前一筆餐點</small></span><span>›</span></button><button class="add-option" data-add-method="yesterday"><span class="option-icon">↶</span><span><strong>昨天同餐</strong><small>沿用昨天最近一餐</small></span><span>›</span></button></div></div></div>
 
-<!-- Delete confirmation modal -->
-<div id="confirm-modal" class="modal hidden">
-  <div class="modal-backdrop"></div>
-  <div class="modal-content glass-card modal-small">
-    <div class="modal-header">
-      <h3>⚠️ 確認操作</h3>
-    </div>
-    <div class="modal-body">
-      <!-- Filled by showConfirmModal JS -->
-    </div>
-  </div>
-</div>
-
+<div id="edit-modal" class="modal hidden"><div class="modal-backdrop"></div><div class="modal-content glass-card"><div class="modal-header"><h2>編輯餐點</h2><button class="icon-btn" data-action="close-modal" title="關閉" aria-label="關閉">×</button></div><div id="edit-modal-body" class="modal-body"></div><div class="modal-footer"><button id="edit-cancel-btn" class="btn btn-secondary">取消</button><button id="edit-save-btn" class="btn btn-primary">儲存修改</button></div></div></div>
+<div id="confirm-modal" class="modal hidden"><div class="modal-backdrop"></div><div class="modal-content glass-card modal-small"><div class="modal-header"><h2>確認操作</h2></div><div class="modal-body"></div></div></div>
 <script type="module" src="js/app.js"></script>
-
 </body>
 </html>
